@@ -1,0 +1,10 @@
+[entryPoints]
+  [entryPoints.http]
+	address = ":1420"
+
+[api]
+
+[providers]
+  [providers.file]
+	directory = "/etc/traefik/dynamic"
+	watch = true

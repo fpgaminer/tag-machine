@@ -1,0 +1,58 @@
+http:
+  routers:
+    # HTTP Router for API
+    api-router:
+      rule: "PathPrefix(`/api`)"
+      service: api-service
+      middlewares:
+        - strip-api-prefix
+
+    # HTTP Router for Prediction
+    prediction-router:
+      rule: "PathPrefix(`/prediction`)"
+      service: prediction-service
+      middlewares:
+        - strip-prediction-prefix
+
+    # HTTP Router for Web Dev
+    web-router:
+      rule: "PathPrefix(`/`)"
+      service: web-service
+
+  services:
+    # Service for Rust API
+    api-service:
+      loadBalancer:
+        servers:
+          - url: "http://rust-api:8086"
+
+    # Service for Prediction Server
+    prediction-service:
+      loadBalancer:
+        servers:
+          - url: "http://prediction-server:8087"
+
+    # Service for Web Dev
+    web-service:
+      loadBalancer:
+        servers:
+          - url: "http://web-dev:3000"
+        healthCheck:
+          path: "/"
+          interval: "30s"
+          timeout: "2s"
+          headers:
+            Accept: "*/*"
+
+  middlewares:
+    # Middleware to strip /api prefix
+    strip-api-prefix:
+      stripPrefix:
+        prefixes:
+          - "/api"
+
+    # Middleware to strip /prediction prefix
+    strip-prediction-prefix:
+      stripPrefix:
+        prefixes:
+          - "/prediction"

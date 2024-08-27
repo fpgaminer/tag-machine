@@ -1,0 +1,9 @@
+*
+!src/*
+!Cargo.lock
+!Cargo.toml
+!.sqlx/*
+!tag_aliases000000000000.json
+!tag_blacklist20231201.txt
+!tag_deprecations20231201.txt
+!tag_implications000000000000.json

@@ -1,0 +1,12 @@
+/db-data-upgrade
+/.vscode
+/metadata
+*.sql.zst
+__pycache__
+*.secret
+/elastic-search-junk
+/old-git
+*.pt
+/pg-socket
+*.bin
+wiki_pages*.json
