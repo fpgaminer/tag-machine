@@ -2,10 +2,8 @@
 use futures::TryStreamExt;
 use serde::Deserialize;
 use serde_json::json;
-use sqlx::postgres::PgRow;
-use sqlx::PgPool;
+use sqlx::{postgres::PgRow, PgPool, Row};
 use std::collections::HashMap;
-use sqlx::Row;
 
 
 const MAX_QUERY_DEPTH: u32 = 5;
@@ -41,7 +39,9 @@ impl SearchSelect {
 			SearchSelect::Active => "i.active",
 			SearchSelect::Tags => "i.tags",
 			SearchSelect::Caption => "i.caption",
-			SearchSelect::Attributes => "json_agg(json_build_object('key', a.key, 'value', a.value)) FILTER (WHERE a.key IS NOT NULL AND a.value IS NOT NULL) AS attributes",
+			SearchSelect::Attributes => {
+				"json_agg(json_build_object('key', a.key, 'value', a.value)) FILTER (WHERE a.key IS NOT NULL AND a.value IS NOT NULL) AS attributes"
+			},
 			SearchSelect::Count => "count(*)",
 			SearchSelect::MinId => "min(i.id)",
 			SearchSelect::MaxId => "max(i.id)",
@@ -76,7 +76,15 @@ impl SearchSelect {
 				map.insert(key, serde_json::Value::Bool(row.get::<bool, _>(index)));
 			},
 			SearchSelect::Tags => {
-				map.insert(key, serde_json::Value::Array(row.get::<Vec<i64>, _>(index).into_iter().map(|tag_id| serde_json::Value::Number(serde_json::Number::from(tag_id))).collect()));
+				map.insert(
+					key,
+					serde_json::Value::Array(
+						row.get::<Vec<i64>, _>(index)
+							.into_iter()
+							.map(|tag_id| serde_json::Value::Number(serde_json::Number::from(tag_id)))
+							.collect(),
+					),
+				);
 			},
 			SearchSelect::Caption => {
 				let value = row.get::<Option<String>, _>(index);
@@ -108,7 +116,6 @@ impl SearchSelect {
 				map.insert(key, serde_json::Value::Number(serde_json::Number::from(row.get::<i64, _>(index))));
 			},
 		}
-
 	}
 }
 
@@ -226,14 +233,18 @@ impl SearchQuery {
 			// Need to select at least one column
 			return Err(());
 		}
-		
+
 		if self.select.contains(&SearchSelect::Attributes) {
 			needs_attributes = true;
 		}
 
 		if self.select.contains(&SearchSelect::Count) || self.select.contains(&SearchSelect::MinId) || self.select.contains(&SearchSelect::MaxId) {
 			// If count, min, or max is selected, there can't be any other selects besides those
-			if !self.select.iter().all(|s| s == &SearchSelect::Count || s == &SearchSelect::MinId || s == &SearchSelect::MaxId) {
+			if !self
+				.select
+				.iter()
+				.all(|s| s == &SearchSelect::Count || s == &SearchSelect::MinId || s == &SearchSelect::MaxId)
+			{
 				return Err(());
 			}
 		}
@@ -245,24 +256,21 @@ impl SearchQuery {
 				return Err(());
 			}
 			Some(where_clauses)
-		}
-		else {
+		} else {
 			None
 		};
 
 		// Joins
 		let joins = if needs_attributes {
 			" LEFT JOIN image_attributes a ON i.id = a.image_id"
-		}
-		else {
+		} else {
 			""
 		};
 
 		// Group by
 		let group_by = if self.select.contains(&SearchSelect::Attributes) {
 			" GROUP BY i.id"
-		}
-		else {
+		} else {
 			""
 		};
 
@@ -272,8 +280,7 @@ impl SearchQuery {
 				OrderBy::Id => " ORDER BY i.id",
 				OrderBy::Hash => " ORDER BY i.hash",
 			}
-		}
-		else {
+		} else {
 			""
 		};
 
@@ -283,8 +290,7 @@ impl SearchQuery {
 				return Err(());
 			}
 			Some(limit)
-		}
-		else {
+		} else {
 			None
 		};
 
@@ -333,9 +339,8 @@ impl SearchQuery {
 
 
 		let result = query.fetch(db);
-		let result = result.try_fold(
-			Vec::new(),
-			|mut images, row| async move {
+		let result = result
+			.try_fold(Vec::new(), |mut images, row| async move {
 				let mut image = serde_json::Map::new();
 
 				for (i, select) in self.select.iter().enumerate() {
@@ -345,9 +350,8 @@ impl SearchQuery {
 				images.push(image);
 
 				Ok(images)
-			},
-		)
-		.await?;
+			})
+			.await?;
 
 		Ok(result)
 	}

@@ -1,10 +1,10 @@
 mod database;
 mod error;
+mod errors;
 #[cfg(test)]
 mod integration_test;
-mod tags;
 mod search_query;
-mod errors;
+mod tags;
 
 use std::{collections::HashMap, os::unix::fs::PermissionsExt, path::Path};
 
@@ -12,9 +12,14 @@ use actix_cors::Cors;
 use actix_files::NamedFile;
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
 use actix_web::{
-	body::MessageBody, dev::{ServiceFactory, ServiceRequest, ServiceResponse}, middleware::{self, Logger}, web::{self, Data}, App, HttpRequest, HttpResponse, HttpServer
+	body::MessageBody,
+	dev::{ServiceFactory, ServiceRequest, ServiceResponse},
+	middleware::{self, Logger},
+	web::{self, Data},
+	App, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::Context;
+use clap::Parser;
 use database::ImageHash;
 use env_logger::Env;
 use errors::ApiError;
@@ -28,7 +33,6 @@ use sqlx::{
 };
 use tags::TagMappings;
 use tokio::io::AsyncReadExt;
-use clap::Parser;
 
 use crate::error::ServerError;
 use image::{self, imageops, io::Reader as ImageReader};

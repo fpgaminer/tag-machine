@@ -1,4 +1,8 @@
-use std::{collections::{HashMap, HashSet}, hash::Hash, time::Instant};
+use std::{
+	collections::{HashMap, HashSet},
+	hash::Hash,
+	time::Instant,
+};
 
 use futures::{StreamExt, TryStreamExt};
 use rand::prelude::Distribution;
@@ -6,7 +10,10 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
 
-use crate::{errors::ApiError, search_query::{OrderBy, SearchOperator, SearchQuery, SearchSelect}};
+use crate::{
+	errors::ApiError,
+	search_query::{OrderBy, SearchOperator, SearchQuery, SearchSelect},
+};
 
 
 #[derive(Serialize)]
@@ -62,16 +69,8 @@ enum LogAction {
 	RemoveTag(String),
 	AddImage(ImageHash),
 	RemoveImage(ImageHash),
-	AddAttribute {
-		image_hash: ImageHash,
-		key: String,
-		value: String,
-	},
-	RemoveAttribute {
-		image_hash: ImageHash,
-		key: String,
-		value: String,
-	},
+	AddAttribute { image_hash: ImageHash, key: String, value: String },
+	RemoveAttribute { image_hash: ImageHash, key: String, value: String },
 	AddImageTag(ImageHash, String),
 	RemoveImageTag(ImageHash, String),
 	CaptionImage(ImageHash, String),
@@ -223,9 +222,7 @@ pub async fn get_image_by_id(db: &PgPool, image_id: i64) -> Result<Option<Image>
 /// List image IDs in the database.
 pub async fn list_image_ids(db: &PgPool) -> Result<Vec<i64>, sqlx::Error> {
 	//let ids = sqlx::query_scalar!("SELECT id FROM images_2 ORDER BY id").fetch_all(db).await?;
-	let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM images_2 ORDER BY id")
-		.fetch_all(db)
-		.await?;
+	let ids: Vec<i64> = sqlx::query_scalar("SELECT id FROM images_2 ORDER BY id").fetch_all(db).await?;
 
 	Ok(ids)
 }
@@ -371,9 +368,12 @@ pub async fn add_image(db: &PgPool, image_hash: ImageHash, user_id: i64) -> Resu
 pub async fn remove_image(db: &PgPool, image_hash: ImageHash, user_id: i64) -> Result<Result<(), ()>, sqlx::Error> {
 	let mut transaction = db.begin().await?;
 
-	let changes = sqlx::query!("UPDATE images_2 SET active = false, tags = ARRAY[]::bigint[], tags_blame = jsonb_build_object() WHERE hash = $1 AND active = true", &image_hash.0)
-		.execute(&mut *transaction)
-		.await?;
+	let changes = sqlx::query!(
+		"UPDATE images_2 SET active = false, tags = ARRAY[]::bigint[], tags_blame = jsonb_build_object() WHERE hash = $1 AND active = true",
+		&image_hash.0
+	)
+	.execute(&mut *transaction)
+	.await?;
 
 	if changes.rows_affected() == 0 {
 		// Image does not exist or is inactive, return error
@@ -381,9 +381,12 @@ pub async fn remove_image(db: &PgPool, image_hash: ImageHash, user_id: i64) -> R
 	}
 
 	// Remove image attributes
-	sqlx::query!("DELETE FROM image_attributes WHERE image_id = (SELECT id FROM images_2 WHERE hash = $1)", &image_hash.0)
-		.execute(&mut *transaction)
-		.await?;
+	sqlx::query!(
+		"DELETE FROM image_attributes WHERE image_id = (SELECT id FROM images_2 WHERE hash = $1)",
+		&image_hash.0
+	)
+	.execute(&mut *transaction)
+	.await?;
 
 	// Log the action
 	add_log_entry(&mut *transaction, user_id, LogAction::RemoveImage(image_hash)).await?;
@@ -500,7 +503,8 @@ pub async fn add_image_attribute(db: &PgPool, image_hash: ImageHash, key: &str, 
 	// This is needed so that the log table stays in lock step with the rest of the database
 	let (image_id, active) = match sqlx::query!("SELECT id, active FROM images_2 WHERE hash = $1 FOR UPDATE", &image_hash.0)
 		.fetch_optional(&mut *transaction)
-		.await? {
+		.await?
+	{
 		Some(row) => (row.id, row.active),
 		None => {
 			// Image does not exist or is inactive, return error
@@ -514,9 +518,14 @@ pub async fn add_image_attribute(db: &PgPool, image_hash: ImageHash, key: &str, 
 
 	if singular {
 		// Remove existing attributes with the same key
-		let values = sqlx::query!("DELETE FROM image_attributes WHERE image_id = $1 AND key = $2 AND value != $3 RETURNING value", image_id, key, value)
-			.fetch_all(&mut *transaction)
-			.await?;
+		let values = sqlx::query!(
+			"DELETE FROM image_attributes WHERE image_id = $1 AND key = $2 AND value != $3 RETURNING value",
+			image_id,
+			key,
+			value
+		)
+		.fetch_all(&mut *transaction)
+		.await?;
 
 		// Record the removal actions
 		for row in values {
@@ -576,7 +585,8 @@ pub async fn remove_image_attribute(db: &PgPool, image_hash: ImageHash, key: &st
 	// Get the image id and grab a lock on the row to prevent concurrent updates to this image's attributes
 	let image_id = match sqlx::query_scalar!("SELECT id FROM images_2 WHERE hash = $1 AND active = true FOR UPDATE", &image_hash.0)
 		.fetch_optional(&mut *transaction)
-		.await? {
+		.await?
+	{
 		Some(id) => id,
 		None => {
 			// Image does not exist or is inactive, return error

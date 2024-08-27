@@ -95,13 +95,25 @@ async fn test_everything() {
 		.unwrap();
 
 	// Multi-value attributes
-	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source1", 1, false).await.unwrap();
-	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source2", 1, false).await.unwrap();
-	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source3", 1, false).await.unwrap();
+	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source1", 1, false)
+		.await
+		.unwrap();
+	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source2", 1, false)
+		.await
+		.unwrap();
+	database::add_image_attribute(&db_pool, image_hashes[0], "source", "source3", 1, false)
+		.await
+		.unwrap();
 
 	// Test removing an attribute
-	database::remove_image_attribute(&db_pool, image_hashes[0], "attr2", "value_for_attr2", 1).await.unwrap().unwrap();
-	database::remove_image_attribute(&db_pool, image_hashes[0], "source", "source2", 1).await.unwrap().unwrap();
+	database::remove_image_attribute(&db_pool, image_hashes[0], "attr2", "value_for_attr2", 1)
+		.await
+		.unwrap()
+		.unwrap();
+	database::remove_image_attribute(&db_pool, image_hashes[0], "source", "source2", 1)
+		.await
+		.unwrap()
+		.unwrap();
 
 	// Test editing an attribute
 	database::add_image_attribute(&db_pool, image_hashes[1], "attr1", "new value for attr1 on image 2", 1, true)
@@ -111,7 +123,10 @@ async fn test_everything() {
 	// Test captioning images
 	database::edit_image_caption(&db_pool, image_hashes[0], "caption1", 1).await.unwrap().unwrap();
 	database::edit_image_caption(&db_pool, image_hashes[1], "caption2", 1).await.unwrap().unwrap();
-	database::edit_image_caption(&db_pool, image_hashes[1], "caption2-new", 1).await.unwrap().unwrap();
+	database::edit_image_caption(&db_pool, image_hashes[1], "caption2-new", 1)
+		.await
+		.unwrap()
+		.unwrap();
 
 	// Test tagging images
 	database::tag_image(&db_pool, image_hashes[0], "tag1", 1).await.unwrap().unwrap();
@@ -141,16 +156,19 @@ async fn test_everything() {
 		(
 			image_hashes[0],
 			ExpectedImage {
-				attributes: HashMap::from_iter(vec![("attr1".to_string(), vec!["value_for_attr1".to_string()]), ("source".to_string(), vec!["source1".to_string(), "source3".to_string()]),]),
-				tags: HashSet::from_iter(vec!["tag2".to_string(),]),
+				attributes: HashMap::from_iter(vec![
+					("attr1".to_string(), vec!["value_for_attr1".to_string()]),
+					("source".to_string(), vec!["source1".to_string(), "source3".to_string()]),
+				]),
+				tags: HashSet::from_iter(vec!["tag2".to_string()]),
 				caption: Some("caption1".to_owned()),
 			},
 		),
 		(
 			image_hashes[1],
 			ExpectedImage {
-				attributes: HashMap::from_iter(vec![("attr1".to_string(), vec!["new value for attr1 on image 2".to_string()]),]),
-				tags: HashSet::from_iter(vec!["tag1".to_string(),]),
+				attributes: HashMap::from_iter(vec![("attr1".to_string(), vec!["new value for attr1 on image 2".to_string()])]),
+				tags: HashSet::from_iter(vec!["tag1".to_string()]),
 				caption: Some("caption2-new".to_owned()),
 			},
 		),
@@ -246,7 +264,10 @@ async fn test_everything() {
 	assert!(database::add_image_attribute(&db_pool, rng.gen(), "attr1", "value", 1, true).await.is_err());
 
 	// Make sure the API returns an error if we try to remove an attribute on an image that doesn't exist
-	assert!(database::remove_image_attribute(&db_pool, rng.gen(), "attr1", "value", 1).await.unwrap().is_err());
+	assert!(database::remove_image_attribute(&db_pool, rng.gen(), "attr1", "value", 1)
+		.await
+		.unwrap()
+		.is_err());
 
 	// Make sure the API returns an error if we try to re-tag an image with a tag that it already has
 	assert!(database::tag_image(&db_pool, image_hashes[0], "tag2", 1).await.unwrap().is_err());
@@ -255,7 +276,10 @@ async fn test_everything() {
 	assert!(database::untag_image(&db_pool, image_hashes[0], "tag3", 1).await.unwrap().is_err());
 
 	// Make sure the API returns an error if we try to remove an attribute that doesn't exist
-	assert!(database::remove_image_attribute(&db_pool, image_hashes[0], "attr3", "value", 1).await.unwrap().is_err());
+	assert!(database::remove_image_attribute(&db_pool, image_hashes[0], "attr3", "value", 1)
+		.await
+		.unwrap()
+		.is_err());
 
 	// Make sure the API returns an error if we try to caption an image that doesn't exist
 	assert!(database::edit_image_caption(&db_pool, rng.gen(), "caption", 1).await.unwrap().is_err());
@@ -264,7 +288,9 @@ async fn test_everything() {
 	assert!(database::edit_image_caption(&db_pool, image_hashes[0], "caption1", 1).await.unwrap().is_err());
 
 	// Make sure the API returns an error if we try to edit an attribute with the same value
-	assert!(database::add_image_attribute(&db_pool, image_hashes[0], "attr1", "value_for_attr1", 1, true).await.is_err());
+	assert!(database::add_image_attribute(&db_pool, image_hashes[0], "attr1", "value_for_attr1", 1, true)
+		.await
+		.is_err());
 
 	println!("Docker foo: {}", docker.container_id);
 }
