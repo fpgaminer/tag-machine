@@ -849,39 +849,3 @@ pub async fn list_images_with_blame(db: &PgPool, min_id: i64, limit: Option<i64>
 
 	Ok(images)
 }
-
-
-pub async fn set_image_embedding(db: &PgPool, image_hash: ImageHash, embedding_name: &str, embedding: &[u8]) -> Result<Result<(), ()>, sqlx::Error> {
-	let column_name = match embedding_name {
-		"embedding_1" => "embedding_1",
-		_ => return Ok(Err(())),
-	};
-	let query = format!("UPDATE images_2 SET {} = $1 WHERE hash = $2 AND active = true", column_name);
-
-	let changes = sqlx::query(&query).bind(embedding).bind(image_hash.0).execute(db).await?;
-
-	if changes.rows_affected() == 0 {
-		// Image does not exist or is inactive, return error
-		return Ok(Err(()));
-	}
-
-	Ok(Ok(()))
-}
-
-
-pub fn list_image_embeddings<'a>(
-	db: &'a PgPool,
-	embedding_name: &str,
-	min_id: i64,
-	limit: Option<i64>,
-) -> futures::stream::BoxStream<'a, Result<(i64, Vec<u8>), sqlx::Error>> {
-	let query = match embedding_name {
-		"embedding_1" => "SELECT id, embedding_1 FROM images_2 WHERE id >= $1 ORDER BY id ASC LIMIT $2",
-		_ => return futures::stream::empty().boxed(),
-	};
-	let limit = limit.unwrap_or(i64::MAX);
-
-	let images = sqlx::query_as(query).bind(min_id).bind(limit).fetch(db);
-
-	images
-}

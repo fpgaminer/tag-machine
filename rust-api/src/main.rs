@@ -12,13 +12,12 @@ use actix_cors::Cors;
 use actix_files::NamedFile;
 use actix_multipart::form::{tempfile::TempFile, MultipartForm};
 use actix_web::{
-	body::MessageBody, dev::{ServiceFactory, ServiceRequest, ServiceResponse}, middleware::{self, Logger}, web::{self, Bytes, BytesMut, Data}, App, HttpRequest, HttpResponse, HttpServer
+	body::MessageBody, dev::{ServiceFactory, ServiceRequest, ServiceResponse}, middleware::{self, Logger}, web::{self, Data}, App, HttpRequest, HttpResponse, HttpServer
 };
 use anyhow::Context;
 use database::ImageHash;
 use env_logger::Env;
 use errors::ApiError;
-use futures::StreamExt;
 use search_query::{OrderBy, SearchOperator, SearchSelect};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
@@ -137,8 +136,6 @@ pub fn build_app(
 		.service(get_tag_mappings)
 		.service(list_logs)
 		.service(list_images_with_blame)
-		.service(set_image_embedding)
-		.service(list_image_embeddings)
 		.service(upload_image)
 		.service(caption_image)
 }
@@ -564,63 +561,6 @@ async fn list_images_with_blame(db_pool: Data<PgPool>, query: web::Query<ListIma
 	let images = database::list_images_with_blame(&db_pool, query.min_id.unwrap_or(0), query.limit).await?;
 
 	Ok(HttpResponse::Ok().json(images))
-}
-
-
-#[derive(Deserialize)]
-struct SetImageEmbeddingQuery {
-	hash: ImageHash,
-	name: String,
-	embedding: String,
-	user: i64,
-}
-
-
-/// Set an image embedding on an image.
-#[actix_web::post("/set_image_embedding")]
-async fn set_image_embedding(db_pool: Data<PgPool>, data: web::Json<SetImageEmbeddingQuery>) -> Result<HttpResponse, ServerError> {
-	// Decode embedding as hex string
-	let embedding = match hex::decode(&data.embedding) {
-		Ok(embedding) => embedding,
-		Err(_) => return Ok(HttpResponse::BadRequest().finish()),
-	};
-
-	match database::set_image_embedding(&db_pool, data.hash, &data.name, &embedding).await? {
-		Ok(_) => Ok(HttpResponse::Ok().finish()),
-		Err(_) => Ok(HttpResponse::NotFound().finish()),
-	}
-}
-
-
-#[derive(Deserialize)]
-struct ListImageEmbeddingsQuery {
-	name: String,
-	min_id: Option<i64>,
-	limit: Option<i64>,
-}
-
-
-/// List image embeddings.
-#[actix_web::get("/list_image_embeddings")]
-async fn list_image_embeddings(db_pool: Data<PgPool>, query: web::Query<ListImageEmbeddingsQuery>) -> Result<HttpResponse, ServerError> {
-	let query = query.into_inner();
-
-	let stream = async_stream::stream! {
-		let mut embeddings = database::list_image_embeddings(&db_pool, &query.name, query.min_id.unwrap_or(0), query.limit);
-
-		while let Some(row) = embeddings.next().await {
-			let (image_id, embedding) = row?;
-			let image_id = image_id.to_be_bytes();
-			let mut bytes = BytesMut::from(image_id.as_ref());
-			bytes.extend_from_slice(&embedding);
-
-			let result: Result<Bytes, sqlx::Error> = Ok(bytes.freeze());
-
-			yield result;
-		}
-	};
-
-	Ok(HttpResponse::Ok().append_header(("Content-Type", "application/octet-stream")).streaming(stream))
 }
 
 
