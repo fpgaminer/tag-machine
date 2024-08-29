@@ -49,6 +49,11 @@ export interface ApiTagMappings {
 	deprecations: string[];
 }
 
+export interface ApiUserInfo {
+	id: number;
+	is_admin: boolean;
+}
+
 export type SearchOperator =
 	| { kind: "not"; value: SearchOperator }
 	| { kind: "and"; value: [SearchOperator, SearchOperator] }
@@ -119,7 +124,12 @@ export function searchOperatorToJson(operator: SearchOperator | null): object | 
 export type SearchSelect = "id" | "hash" | "tags" | "attributes" | "active" | "caption" | "count" | "min_id" | "max_id";
 
 export async function listTags(): Promise<ApiTag[]> {
-	const response = await fetch(`${API_URL}/tags`);
+	const user_token = localStorage.getItem("user_token") ?? "";
+	const response = await fetch(`${API_URL}/tags`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
 	if (!response.ok) {
 		throw new Error(`Failed to get tags: ${response.status}`);
 	}
@@ -128,7 +138,12 @@ export async function listTags(): Promise<ApiTag[]> {
 }
 
 export async function getTagByName(name: string): Promise<ApiTag | null> {
-	const response = await fetch(`${API_URL}/tag_by_name/${name}`);
+	const user_token = localStorage.getItem("user_token") ?? "";
+	const response = await fetch(`${API_URL}/tag_by_name/${name}`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
 	if (!response.ok) {
 		throw new Error(`Failed to get tag by name: ${response.status}`);
 	}
@@ -137,10 +152,12 @@ export async function getTagByName(name: string): Promise<ApiTag | null> {
 }
 
 export async function addTag(name: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/add_tag`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			name,
@@ -156,10 +173,12 @@ export async function addTag(name: string): Promise<void> {
 }
 
 export async function removeTag(name: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/remove_tag`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			name,
@@ -180,12 +199,14 @@ export async function searchImages(
 	limit: number | null,
 	operator: SearchOperator | null
 ): Promise<ApiSearchResults> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const operatorJson = searchOperatorToJson(operator);
 
 	const response = await fetch(`${API_URL}/search_images`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			order_by: orderBy,
@@ -203,7 +224,12 @@ export async function searchImages(
 }
 
 export async function getImageByHash(hash: string): Promise<ApiImage | null> {
-	const response = await fetch(`${API_URL}/image_by_hash/${hash}`);
+	const user_token = localStorage.getItem("user_token") ?? "";
+	const response = await fetch(`${API_URL}/image_by_hash/${hash}`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
 
 	if (response.status === 404) {
 		return null;
@@ -217,7 +243,12 @@ export async function getImageByHash(hash: string): Promise<ApiImage | null> {
 }
 
 export async function getImageById(id: number): Promise<ApiImage | null> {
-	const response = await fetch(`${API_URL}/image_by_id/${id}`);
+	const user_token = localStorage.getItem("user_token") ?? "";
+	const response = await fetch(`${API_URL}/image_by_id/${id}`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
 
 	if (response.status === 404) {
 		return null;
@@ -231,10 +262,12 @@ export async function getImageById(id: number): Promise<ApiImage | null> {
 }
 
 export async function addImage(hash: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/add_image`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -250,10 +283,12 @@ export async function addImage(hash: string): Promise<void> {
 }
 
 export async function removeImage(hash: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/remove_image`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -269,10 +304,12 @@ export async function removeImage(hash: string): Promise<void> {
 }
 
 export async function addImageAttribute(hash: string, key: string, value: string, singular: boolean): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/add_image_attribute`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -291,10 +328,12 @@ export async function addImageAttribute(hash: string, key: string, value: string
 }
 
 export async function removeImageAttribute(hash: string, key: string, value: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/remove_image_attribute`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -312,10 +351,12 @@ export async function removeImageAttribute(hash: string, key: string, value: str
 }
 
 export async function captionImage(hash: string, caption: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/caption_image`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -332,10 +373,12 @@ export async function captionImage(hash: string, caption: string): Promise<void>
 }
 
 export async function tagImage(hash: string, tag: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/tag_image`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -352,10 +395,12 @@ export async function tagImage(hash: string, tag: string): Promise<void> {
 }
 
 export async function untagImage(hash: string, tag: string): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${API_URL}/untag_image`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash,
@@ -372,10 +417,12 @@ export async function untagImage(hash: string, tag: string): Promise<void> {
 }
 
 export async function getTagSuggestions(hash: string): Promise<Map<string, number>> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${PREDICTION_API_URL}/predict`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash: hash,
@@ -391,10 +438,12 @@ export async function getTagSuggestions(hash: string): Promise<Map<string, numbe
 }
 
 export async function getTagAssociations(tags: string[]): Promise<Map<string, number>> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${PREDICTION_API_URL}/tag_assoc`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			tags: tags,
@@ -410,10 +459,12 @@ export async function getTagAssociations(tags: string[]): Promise<Map<string, nu
 }
 
 export async function getTagImageAssociations(tags: string[], hash: string): Promise<Map<string, number>> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${PREDICTION_API_URL}/tag_assoc`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			tags: tags,
@@ -430,10 +481,12 @@ export async function getTagImageAssociations(tags: string[], hash: string): Pro
 }
 
 export async function getImageCaptionSuggestion(hash: string): Promise<string> {
+	const user_token = localStorage.getItem("user_token") ?? "";
 	const response = await fetch(`${PREDICTION_API_URL}/caption`, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
+			Authorization: `Bearer ${user_token}`,
 		},
 		body: JSON.stringify({
 			hash: hash,
@@ -449,7 +502,13 @@ export async function getImageCaptionSuggestion(hash: string): Promise<string> {
 }
 
 export async function getTagMappings(): Promise<ApiTagMappings> {
-	const response = await fetch(`${API_URL}/tag_mappings`);
+	const user_token = localStorage.getItem("user_token") ?? "";
+	const response = await fetch(`${API_URL}/tag_mappings`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
+
 	if (!response.ok) {
 		throw new Error(`Failed to get tag mappings: ${response.status}`);
 	}
@@ -458,6 +517,8 @@ export async function getTagMappings(): Promise<ApiTagMappings> {
 }
 
 export async function uploadImage(file: File): Promise<void> {
+	const user_token = localStorage.getItem("user_token") ?? "";
+
 	const formData = new FormData();
 	formData.append("file", file);
 	formData.append("user", USER_ID.toString());
@@ -466,6 +527,9 @@ export async function uploadImage(file: File): Promise<void> {
 	const response = await fetch(`${API_URL}/upload_image`, {
 		method: "POST",
 		body: formData,
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
 	});
 	console.log("Got image upload response");
 
@@ -474,4 +538,43 @@ export async function uploadImage(file: File): Promise<void> {
 	}
 
 	return;
+}
+
+export async function login(username: string, login_key: string): Promise<string> {
+	const response = await fetch(`${API_URL}/login`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			username,
+			login_key,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to login: ${response.status}`);
+	}
+
+	return (await response.json()) as string;
+}
+
+export async function user_info(): Promise<ApiUserInfo | null> {
+	const user_token = localStorage.getItem("user_token") ?? "";
+
+	const response = await fetch(`${API_URL}/user_info`, {
+		headers: {
+			Authorization: `Bearer ${user_token}`,
+		},
+	});
+
+	if (response.status === 401) {
+		return null;
+	}
+
+	if (!response.ok) {
+		throw new Error(`Failed to get user info: ${response.status}`);
+	}
+
+	return (await response.json()) as ApiUserInfo;
 }

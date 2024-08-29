@@ -9,7 +9,7 @@ import struct
 from collections import defaultdict
 
 
-API_URL = 'http://localhost:8086'
+API_URL = 'http://localhost:1420'
 
 
 class DBImage(BaseModel):
@@ -27,7 +27,7 @@ class DBImage(BaseModel):
 			'tag': name,
 			'user': user_id,
 		}
-		r = requests.post(f'{API_URL}/tag_image', json=data)
+		r = requests.post(f'{API_URL}/api/tag_image', json=data)
 		r.raise_for_status()
 		self.tags.add(name)
 	
@@ -37,7 +37,7 @@ class DBImage(BaseModel):
 			'tag': name,
 			'user': user_id,
 		}
-		r = requests.post(f'{API_URL}/untag_image', json=data)
+		r = requests.post(f'{API_URL}/api/untag_image', json=data)
 		r.raise_for_status()
 		self.tags.remove(name)
 	
@@ -53,7 +53,7 @@ class DBImage(BaseModel):
 			'value': value,
 			'user': user_id,
 		}
-		r = requests.post(f'{API_URL}/edit_image_attribute', json=data)
+		r = requests.post(f'{API_URL}/api/edit_image_attribute', json=data)
 		r.raise_for_status()
 		self.attributes[name] = value
 	
@@ -63,7 +63,7 @@ class DBImage(BaseModel):
 			'key': name,
 			'user': user_id,
 		}
-		r = requests.post(f'{API_URL}/remove_image_attribute', json=data)
+		r = requests.post(f'{API_URL}/api/remove_image_attribute', json=data)
 		r.raise_for_status()
 		del self.attributes[name]
 
@@ -96,7 +96,7 @@ class DatabaseData:
 
 	fetch_limit: int = 1000000
 
-	def __init__(self):
+	def __init__(self, username: str, login_key: bytes):
 		self.tags = []
 		self.tag_to_id = {}
 		self.id_to_tag = {}
@@ -104,9 +104,16 @@ class DatabaseData:
 		self.images = {}
 		self.images_sorted_by_hash = []
 		self.images_sorted_by_id = []
+
+		# Login
+		response = requests.post(API_URL + '/api/login', json={'username': username, 'login_key': login_key.hex()})
+		response.raise_for_status()
+		user_token = response.json()
+		assert isinstance(user_token, str)
+		self.user_token = user_token
 	
 	def fetch_tags(self):
-		response = requests.get(API_URL + '/tags')
+		response = requests.get(API_URL + '/api/tags', headers={'Authorization': f'Bearer {self.user_token}'})
 		response.raise_for_status()
 		tags = response.json()
 		self.tags = [DBTag(**tag) for tag in tags]
@@ -116,9 +123,9 @@ class DatabaseData:
 	def fetch_images(self, with_blame: bool = False):
 		while True:
 			if with_blame:
-				response = requests.get(API_URL + '/list_images_with_blame', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': self.fetch_limit})
+				response = requests.get(API_URL + '/api/list_images_with_blame', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': self.fetch_limit}, headers={'Authorization': f'Bearer {self.user_token}'})
 			else:
-				response = requests.get(API_URL + '/list_images', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': self.fetch_limit})
+				response = requests.get(API_URL + '/api/list_images', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': self.fetch_limit}, headers={'Authorization': f'Bearer {self.user_token}'})
 			response.raise_for_status()
 
 			new_images = response.json()
@@ -143,9 +150,9 @@ class DatabaseData:
 	def fetch_image_batches(self, with_blame: bool = False, batch_size: int = 2**16) -> Generator[DBImage, None, None]:
 		while True:
 			if with_blame:
-				response = requests.get(API_URL + '/list_images_with_blame', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': batch_size})
+				response = requests.get(API_URL + '/api/list_images_with_blame', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': batch_size}, headers={'Authorization': f'Bearer {self.user_token}'})
 			else:
-				response = requests.get(API_URL + '/list_images', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': batch_size})
+				response = requests.get(API_URL + '/api/list_images', params={'min_id': max(self.images.keys()) + 1 if len(self.images) > 0 else 0, 'limit': batch_size}, headers={'Authorization': f'Bearer {self.user_token}'})
 			response.raise_for_status()
 
 			new_images = response.json()
@@ -186,7 +193,7 @@ class DatabaseData:
 				'select': ['id','hash','active','tags','attributes','caption'],
 			}
 
-			response = requests.post(API_URL + '/search_images', json=params)
+			response = requests.post(API_URL + '/api/search_images', json=params, headers={'Authorization': f'Bearer {self.user_token}'})
 			response.raise_for_status()
 
 			new_images = response.json()['images']
@@ -217,7 +224,7 @@ class DatabaseData:
 		logs = []
 
 		while True:
-			response = requests.get(API_URL + '/logs', params=params)
+			response = requests.get(API_URL + '/api/logs', params=params, headers={'Authorization': f'Bearer {self.user_token}'})
 			response.raise_for_status()
 			response_json = response.json()
 			new_logs = [DBLog(**log) for log in response_json]
@@ -228,26 +235,6 @@ class DatabaseData:
 			params['min_id'] = new_logs[-1].id + 1
 	
 		return logs
-	
-	def fetch_embeddings(self, embedding_name: str, embedding_size: int, chunk_n: int = 4) -> Generator[tuple[int, bytes], None, None]:
-		with requests.get(API_URL + '/list_image_embeddings', params={'name': embedding_name}, stream=True) as r:
-			r.raise_for_status()
-
-			# Print all the headers
-			for header, value in r.headers.items():
-				print(header, value)
-
-			# Print content type
-			print('Content type:', r.headers['Content-Type'])
-
-			for chunk in r.iter_content(chunk_size=(embedding_size + 8) * chunk_n):
-				if len(chunk) == 0:
-					break
-
-				assert len(chunk) % (embedding_size + 8) == 0
-
-				for (image_id, embedding) in struct.iter_unpack(f'<Q{embedding_size}c', chunk):
-					yield image_id, embedding
 
 
 def read_image_by_id(image_id: int, session: requests.Session | None = None) -> Image.Image:

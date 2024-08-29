@@ -35,7 +35,8 @@ parser.add_argument('--tag-assoc-model', type=str, default='tag_assoc_models/5kc
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-q1gbdzid-49920')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-gfw8glv4-49920')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-i0g1cgpe-599808')
-parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9i6xt5iz-49920')
+#parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9i6xt5iz-49920')
+parser.add_argument('--vlm-model', type=str, default='models/joy-caption-1zjx0z2i-499968')
 
 
 IMAGE_DIR = Path('../rust-api/images')
@@ -175,7 +176,7 @@ def load_vlm_model(model_path: Path):
 	clip_model.requires_grad_(False)
 	clip_model.to('cuda')
 
-	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False, n_modes=14)
+	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False, n_modes=3*7)
 	checkpoint = torch.load(Path(model_path) / "image_adapter.pt", map_location='cpu')
 	image_adapter.load_state_dict(checkpoint)
 	image_adapter.eval()

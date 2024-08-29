@@ -5,14 +5,13 @@ use std::{
 };
 
 use futures::{StreamExt, TryStreamExt};
-use rand::prelude::Distribution;
+use rand::{prelude::Distribution, rngs::OsRng, Rng};
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sqlx::{PgPool, QueryBuilder};
 
 use crate::{
-	errors::ApiError,
-	search_query::{OrderBy, SearchOperator, SearchQuery, SearchSelect},
+	auth::{LoginKey, UserToken}, errors::ApiError, search_query::{OrderBy, SearchOperator, SearchQuery, SearchSelect}
 };
 
 
@@ -61,6 +60,7 @@ pub struct ImageWithBlame {
 	pub active: bool,
 	pub attributes: HashMap<String, Vec<String>>,
 	pub tags_blame: HashMap<i64, i64>,
+	pub caption: Option<String>,
 }
 
 
@@ -125,6 +125,7 @@ impl<'de> Deserialize<'de> for ImageHash {
 		foo.encode_by_ref(buf)
 	}
 }*/
+
 
 /// Get the maximum image ID.
 pub async fn get_max_image_id(db: &PgPool) -> Result<i64, sqlx::Error> {
@@ -816,11 +817,12 @@ pub async fn list_images_with_blame(db: &PgPool, min_id: i64, limit: Option<i64>
 		active: bool,
 		attributes: Option<sqlx::types::JsonValue>,
 		tags_blame: sqlx::types::JsonValue,
+		caption: Option<String>,
 	}
 
 	let images = sqlx::query_as!(
 		ImageRow,
-		"SELECT i.id, i.hash, i.active, i.tags_blame, json_agg(json_build_object('key', a.key, 'value', a.value)) FILTER (WHERE a.key IS NOT NULL AND a.value IS NOT NULL) AS attributes FROM images_2 i LEFT JOIN image_attributes a ON i.id = a.image_id WHERE i.id >= $1 GROUP BY i.id ORDER BY i.id LIMIT $2",
+		"SELECT i.id, i.hash, i.active, i.tags_blame, json_agg(json_build_object('key', a.key, 'value', a.value)) FILTER (WHERE a.key IS NOT NULL AND a.value IS NOT NULL) AS attributes, i.caption FROM images_2 i LEFT JOIN image_attributes a ON i.id = a.image_id WHERE i.id >= $1 GROUP BY i.id ORDER BY i.id LIMIT $2",
 		min_id,
 		limit
 	)
@@ -852,10 +854,78 @@ pub async fn list_images_with_blame(db: &PgPool, min_id: i64, limit: Option<i64>
 			active: row.active,
 			attributes,
 			tags_blame,
+			caption: row.caption,
 		}
 	})
 	.try_collect::<Vec<_>>()
 	.await?;
 
 	Ok(images)
+}
+
+
+pub async fn create_user_token(db: &PgPool, user_id: i64) -> Result<UserToken, sqlx::Error> {
+	// CSPRNG generate a random user token
+	let token: UserToken = OsRng.gen();
+
+	sqlx::query!("INSERT INTO user_tokens (user_id, token, created_at) VALUES ($1, $2, EXTRACT(EPOCH FROM NOW())::bigint)", user_id, &token.0)
+		.execute(db)
+		.await?;
+
+	Ok(token)
+}
+
+
+/// Authenticate a username+login_key pair.
+/// Returns the user ID if successful, or None if the login key is invalid.
+pub async fn authenticate_login(db: &PgPool, username: &str, login_key: LoginKey) -> Result<Option<i64>, sqlx::Error> {
+	// Hash the user's login key
+	let login_key_hash = login_key.hash();
+
+	// Get the user ID and login key hash from the database
+	let (user_id, db_login_key): (i64, [u8; 32]) = match sqlx::query_as("SELECT id, login_key FROM users WHERE username = $1")
+		.bind(username)
+		.fetch_optional(db)
+		.await?
+	{
+		Some(row) => row,
+		None => return Ok(None),
+	};
+
+	let db_login_key = LoginKey::from_bytes(db_login_key);
+
+	// Compare the login key hash
+	// This is constant time internally (see LoginKey::eq)
+	if login_key_hash == db_login_key {
+		Ok(Some(user_id))
+	} else {
+		Ok(None)
+	}
+}
+
+
+pub async fn get_user_id_from_token(db: &PgPool, token: &UserToken) -> Result<Option<(i64, bool)>, sqlx::Error> {
+	let user: Option<(i64, bool)> = sqlx::query_as("SELECT u.id, u.is_admin FROM users u JOIN user_tokens ut ON u.id = ut.user_id WHERE ut.token = $1 AND u.active = TRUE")
+		.bind(&token.0)
+		.fetch_optional(db)
+		.await?;
+
+	Ok(user)
+}
+
+
+pub async fn change_login_key(db: &PgPool, user_id: i64, new_login_key: LoginKey) -> Result<(), sqlx::Error> {
+	// Update the user's login key
+	let new_login_key_hash = new_login_key.hash();
+
+	sqlx::query!("UPDATE users SET login_key = $1 WHERE id = $2", &new_login_key_hash.0, user_id)
+		.execute(db)
+		.await?;
+
+	// Delete all user tokens
+	sqlx::query!("DELETE FROM user_tokens WHERE user_id = $1", user_id)
+		.execute(db)
+		.await?;
+
+	Ok(())
 }

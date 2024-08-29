@@ -1,8 +1,9 @@
-import { autorun, makeAutoObservable, runInAction } from "mobx";
+import { autorun, makeAutoObservable, reaction, runInAction } from "mobx";
 import * as api from "./api";
 import { imageListState } from "./state/ImageList";
 import { tagListState } from "./state/TagList";
 import { currentImageState } from "./state/CurrentImage";
+import { scryptAsync } from "@noble/hashes/scrypt";
 
 export const IMAGE_LIST_FETCH_SIZE = 256;
 
@@ -126,12 +127,13 @@ export const errorMessageState = new ErrorMessageState();
 
 /* WindowStates */
 export enum WindowStates {
+	Login,
 	Tagging,
 	Captioning,
 }
 
 class WindowState {
-	state: WindowStates = WindowStates.Tagging;
+	state: WindowStates = WindowStates.Login;
 
 	constructor() {
 		makeAutoObservable(this);
@@ -143,6 +145,25 @@ class WindowState {
 }
 
 export const windowState = new WindowState();
+
+/* Login State */
+class LoginState {
+	loggedIn: boolean = false;
+
+	constructor() {
+		if (localStorage.getItem("user_token") !== null) {
+			this.loggedIn = true;
+		}
+
+		makeAutoObservable(this);
+	}
+
+	setLoggedIn(loggedIn: boolean) {
+		this.loggedIn = loggedIn;
+	}
+}
+
+export const loginState = new LoginState();
 
 /* WikiPopupState */
 class WikiPopupState {
@@ -396,6 +417,7 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 autorun(() => {
 	const searchList = imageListState.searchList;
 	const currentImageIndex = currentImageState.searchIndex;
+	const user_token = localStorage.getItem("user_token");
 
 	if (searchList === null || currentImageIndex === null) {
 		return;
@@ -412,9 +434,15 @@ autorun(() => {
 
 		const image = imageListState.getImageByIndexClamped(i);
 
-		if (image !== null) {
-			const elem = new Image();
-			elem.src = imageHashToUrl(image.hash);
+		if (image !== null && user_token !== null) {
+			fetch(imageHashToUrl(image.hash), {
+				headers: {
+				  'Authorization': `Bearer ${user_token}`
+				}
+			})
+			.then(response => response.blob());
+			//const elem = new Image();
+			//elem.src = imageHashToUrl(image.hash);
 		}
 	}
 });
@@ -518,4 +546,49 @@ export async function initState() {
 	// Query the server
 	//await imageListState.performSearch(Math.max(0, savedSearchIndex - Math.floor(IMAGE_LIST_FETCH_SIZE / 2)));
 	await imageListState.performSearch(minId - Math.floor(IMAGE_LIST_FETCH_SIZE / 2), null);*/
+
+	// Check if we're logged in
+	try {
+		const user_info = await api.user_info();
+
+		if (user_info === null) {
+			loginState.setLoggedIn(false);
+		}
+		else {
+			console.log("Logged in as", user_info.id);
+		}
+	}
+	catch (error) {
+		errorMessageState.setErrorMessage(`Error checking login status: ${error as string}`);
+	}
 }
+
+// Login
+export async function login(username: string, password: string | null, key: string | null) {
+	let login_key = key;
+
+	if (login_key === null && password !== null) {
+		// Scrypt the password
+		const encodedPassword = await scryptAsync(password, username, { N: 2 ** 16, r: 8, p: 1, dkLen: 32 });
+
+		// Hex encode the password
+		login_key = Array.from(encodedPassword).map(byte => byte.toString(16).padStart(2, '0')).join('');
+	}
+	else if (login_key === null) {
+		throw Error("No password or key provided");
+	}
+
+	const user_token = await api.login(username, login_key);
+
+	// Save the token
+	localStorage.setItem("user_token", user_token);
+}
+
+// Automatically switch to login screen if not logged in, or to tagging screen if logged in
+autorun(() => {
+	if (loginState.loggedIn) {
+		windowState.setWindowState(WindowStates.Tagging);
+	} else {
+		windowState.setWindowState(WindowStates.Login);
+	}
+});

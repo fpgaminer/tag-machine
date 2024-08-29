@@ -5,6 +5,7 @@ mod errors;
 mod integration_test;
 mod search_query;
 mod tags;
+mod auth;
 
 use std::{collections::HashMap, os::unix::fs::PermissionsExt, path::Path};
 
@@ -19,6 +20,7 @@ use actix_web::{
 	App, HttpRequest, HttpResponse, HttpServer,
 };
 use anyhow::Context;
+use auth::{AuthenticatedUser, LoginKey};
 use clap::Parser;
 use database::ImageHash;
 use env_logger::Env;
@@ -142,12 +144,15 @@ pub fn build_app(
 		.service(list_images_with_blame)
 		.service(upload_image)
 		.service(caption_image)
+		.service(login)
+		.service(change_login_key)
+		.service(user_info)
 }
 
 
 /// List all tags in the database.
 #[actix_web::get("/tags")]
-async fn list_tags(db_pool: Data<PgPool>) -> Result<HttpResponse, ServerError> {
+async fn list_tags(db_pool: Data<PgPool>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let tags = database::list_tags(&db_pool).await?;
 	let result = tags
 		.into_iter()
@@ -166,7 +171,7 @@ async fn list_tags(db_pool: Data<PgPool>) -> Result<HttpResponse, ServerError> {
 
 /// Get tag by name.
 #[actix_web::get("/tag_by_name/{name}")]
-async fn tag_by_name(db_pool: Data<PgPool>, path: web::Path<(String,)>) -> Result<HttpResponse, ServerError> {
+async fn tag_by_name(db_pool: Data<PgPool>, path: web::Path<(String,)>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let name = path.into_inner().0;
 	let tag = database::get_tag_by_name(&**db_pool, &name).await?;
 
@@ -180,7 +185,7 @@ async fn tag_by_name(db_pool: Data<PgPool>, path: web::Path<(String,)>) -> Resul
 
 /// Get tag mappings.
 #[actix_web::get("/tag_mappings")]
-async fn get_tag_mappings(tag_mappings: Data<TagMappings>) -> Result<HttpResponse, ServerError> {
+async fn get_tag_mappings(tag_mappings: Data<TagMappings>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	Ok(HttpResponse::Ok().json(tag_mappings.as_ref()))
 }
 
@@ -188,13 +193,17 @@ async fn get_tag_mappings(tag_mappings: Data<TagMappings>) -> Result<HttpRespons
 #[derive(Deserialize)]
 struct AddRemoveTagQuery {
 	name: String,
-	user: i64,
 }
 
 /// Add a tag to the database.
 #[actix_web::post("/add_tag")]
-async fn add_tag(db_pool: Data<PgPool>, data: web::Json<AddRemoveTagQuery>) -> Result<HttpResponse, ServerError> {
-	match database::add_tag(&db_pool, &data.name, data.user).await? {
+async fn add_tag(db_pool: Data<PgPool>, data: web::Json<AddRemoveTagQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	// Must be admin to add tags
+	if !user.is_admin {
+		return Ok(HttpResponse::Forbidden().finish());
+	}
+
+	match database::add_tag(&db_pool, &data.name, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::Conflict().finish()),
 	}
@@ -202,8 +211,13 @@ async fn add_tag(db_pool: Data<PgPool>, data: web::Json<AddRemoveTagQuery>) -> R
 
 /// Remove a tag from the database.
 #[actix_web::post("/remove_tag")]
-async fn remove_tag(db_pool: Data<PgPool>, data: web::Json<AddRemoveTagQuery>) -> Result<HttpResponse, ServerError> {
-	match database::remove_tag(&db_pool, &data.name, data.user).await? {
+async fn remove_tag(db_pool: Data<PgPool>, data: web::Json<AddRemoveTagQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	// Must be admin to remove tags
+	if !user.is_admin {
+		return Ok(HttpResponse::Forbidden().finish());
+	}
+
+	match database::remove_tag(&db_pool, &data.name, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::NotFound().finish()),
 	}
@@ -217,7 +231,7 @@ struct ListImagesQuery {
 
 /// List images in the database.
 #[actix_web::get("/list_images")]
-async fn list_images(db_pool: Data<PgPool>, query: web::Query<ListImagesQuery>) -> Result<HttpResponse, ServerError> {
+async fn list_images(db_pool: Data<PgPool>, query: web::Query<ListImagesQuery>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	#[derive(Serialize)]
 	struct ApiImage {
 		id: i64,
@@ -255,7 +269,7 @@ struct SearchImagesQuery {
 
 /// Search images in the database.
 #[actix_web::post("/search_images")]
-async fn search_images(db_pool: Data<PgPool>, data: web::Json<SearchImagesQuery>) -> Result<HttpResponse, ServerError> {
+async fn search_images(db_pool: Data<PgPool>, data: web::Json<SearchImagesQuery>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let query = data.into_inner();
 
 	let images = database::search_images(&db_pool, query.select, query.limit, query.order_by, query.operator).await?;
@@ -277,7 +291,7 @@ async fn search_images(db_pool: Data<PgPool>, data: web::Json<SearchImagesQuery>
 
 /// List image IDs in the database.
 #[actix_web::get("/list_image_ids")]
-async fn list_image_ids(db_pool: Data<PgPool>) -> Result<HttpResponse, ServerError> {
+async fn list_image_ids(db_pool: Data<PgPool>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let images = database::list_image_ids(&db_pool).await?;
 
 	Ok(HttpResponse::Ok().json(images))
@@ -286,7 +300,7 @@ async fn list_image_ids(db_pool: Data<PgPool>) -> Result<HttpResponse, ServerErr
 
 /// Get image by hash.
 #[actix_web::get("/image_by_hash/{hash}")]
-async fn image_by_hash(db_pool: Data<PgPool>, path: web::Path<(ImageHash,)>) -> Result<HttpResponse, ServerError> {
+async fn image_by_hash(db_pool: Data<PgPool>, path: web::Path<(ImageHash,)>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let hash = path.into_inner().0;
 	let image = database::get_image_by_hash(&db_pool, hash).await?;
 
@@ -300,7 +314,7 @@ async fn image_by_hash(db_pool: Data<PgPool>, path: web::Path<(ImageHash,)>) -> 
 
 /// Get image by hash.
 #[actix_web::get("/image_by_id/{id}")]
-async fn image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>) -> Result<HttpResponse, ServerError> {
+async fn image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let image_id = path.into_inner().0;
 	let image = database::get_image_by_id(&db_pool, image_id).await?;
 
@@ -314,12 +328,16 @@ async fn image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>) -> Result<H
 #[derive(Deserialize)]
 struct AddRemoveImageQuery {
 	hash: ImageHash,
-	user: i64,
 }
 
 /// Add an image to the database.
 #[actix_web::post("/add_image")]
-async fn add_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageQuery>) -> Result<HttpResponse, ServerError> {
+async fn add_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	// Must be admin to add images
+	if !user.is_admin {
+		return Ok(HttpResponse::Forbidden().finish());
+	}
+
 	let hash_str = data.hash.to_string();
 	let image_path = Path::new(IMAGE_DIR).join(&hash_str[0..2]).join(&hash_str[2..4]).join(&hash_str);
 
@@ -350,17 +368,23 @@ async fn add_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageQuery>) 
 		return Ok(HttpResponse::InternalServerError().finish());
 	}
 
-	if database::add_image(&db_pool, data.hash, data.user).await?.is_err() {
+	if database::add_image(&db_pool, data.hash, user.id).await?.is_err() {
 		return Ok(HttpResponse::Conflict().finish());
 	}
 
 	Ok(HttpResponse::Ok().finish())
 }
 
+
 /// Remove an image from the database.
 #[actix_web::post("/remove_image")]
-async fn remove_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageQuery>) -> Result<HttpResponse, ServerError> {
-	if database::remove_image(&db_pool, data.hash, data.user).await?.is_err() {
+async fn remove_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	// Must be admin to remove images
+	if !user.is_admin {
+		return Ok(HttpResponse::Forbidden().finish());
+	}
+
+	if database::remove_image(&db_pool, data.hash, user.id).await?.is_err() {
 		return Ok(HttpResponse::NotFound().finish());
 	}
 
@@ -372,14 +396,13 @@ struct EditImageAttributeQuery {
 	hash: ImageHash,
 	key: String,
 	value: String,
-	user: i64,
 	singular: bool,
 }
 
 /// Edit an attribute of an image.
 #[actix_web::post("/add_image_attribute")]
-async fn add_image_attribute(db_pool: Data<PgPool>, data: web::Json<EditImageAttributeQuery>) -> Result<HttpResponse, ServerError> {
-	match database::add_image_attribute(&db_pool, data.hash, &data.key, &data.value, data.user, data.singular).await {
+async fn add_image_attribute(db_pool: Data<PgPool>, data: web::Json<EditImageAttributeQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	match database::add_image_attribute(&db_pool, data.hash, &data.key, &data.value, user.id, data.singular).await {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(ApiError::DuplicateAttribute) => Ok(HttpResponse::Conflict().finish()),
 		Err(ApiError::ImageDoesNotExist) => Ok(HttpResponse::NotFound().finish()),
@@ -394,13 +417,12 @@ struct RemoveImageAttributeQuery {
 	hash: ImageHash,
 	key: String,
 	value: String,
-	user: i64,
 }
 
 /// Remove an attribute from an image.
 #[actix_web::post("/remove_image_attribute")]
-async fn remove_image_attribute(db_pool: Data<PgPool>, data: web::Json<RemoveImageAttributeQuery>) -> Result<HttpResponse, ServerError> {
-	match database::remove_image_attribute(&db_pool, data.hash, &data.key, &data.value, data.user).await? {
+async fn remove_image_attribute(db_pool: Data<PgPool>, data: web::Json<RemoveImageAttributeQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	match database::remove_image_attribute(&db_pool, data.hash, &data.key, &data.value, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::NotFound().finish()),
 	}
@@ -411,13 +433,12 @@ async fn remove_image_attribute(db_pool: Data<PgPool>, data: web::Json<RemoveIma
 struct CaptionImageQuery {
 	hash: ImageHash,
 	caption: String,
-	user: i64,
 }
 
 /// Add a caption to an image, or update it if it already exists.
 #[actix_web::post("/caption_image")]
-async fn caption_image(db_pool: Data<PgPool>, data: web::Json<CaptionImageQuery>) -> Result<HttpResponse, ServerError> {
-	match database::edit_image_caption(&db_pool, data.hash, &data.caption, data.user).await? {
+async fn caption_image(db_pool: Data<PgPool>, data: web::Json<CaptionImageQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	match database::edit_image_caption(&db_pool, data.hash, &data.caption, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::NotFound().finish()),
 	}
@@ -428,22 +449,22 @@ async fn caption_image(db_pool: Data<PgPool>, data: web::Json<CaptionImageQuery>
 struct AddRemoveImageTagQuery {
 	hash: ImageHash,
 	tag: String,
-	user: i64,
 }
 
 /// Add a tag to an image.
 #[actix_web::post("/tag_image")]
-async fn tag_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageTagQuery>) -> Result<HttpResponse, ServerError> {
-	match database::tag_image(&db_pool, data.hash, &data.tag, data.user).await? {
+async fn tag_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageTagQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	match database::tag_image(&db_pool, data.hash, &data.tag, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::Conflict().finish()),
 	}
 }
 
+
 /// Remove a tag from an image.
 #[actix_web::post("/untag_image")]
-async fn untag_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageTagQuery>) -> Result<HttpResponse, ServerError> {
-	match database::untag_image(&db_pool, data.hash, &data.tag, data.user).await? {
+async fn untag_image(db_pool: Data<PgPool>, data: web::Json<AddRemoveImageTagQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	match database::untag_image(&db_pool, data.hash, &data.tag, user.id).await? {
 		Ok(_) => Ok(HttpResponse::Ok().finish()),
 		Err(_) => Ok(HttpResponse::NotFound().finish()),
 	}
@@ -455,10 +476,9 @@ struct GetImageQuery {
 	size: Option<u32>,
 }
 
-
 /// Get an image.
 #[actix_web::get("/images/{hash}")]
-async fn get_image(req: HttpRequest, path: web::Path<(ImageHash,)>, query: web::Query<GetImageQuery>) -> Result<HttpResponse, ServerError> {
+async fn get_image(req: HttpRequest, path: web::Path<(ImageHash,)>, query: web::Query<GetImageQuery>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let hash = path.into_inner().0;
 	let hash_str = hash.to_string();
 	let image_path = Path::new(IMAGE_DIR).join(&hash_str[0..2]).join(&hash_str[2..4]).join(&hash_str);
@@ -513,7 +533,7 @@ fn resize_image(path: &Path, max_side: u32) -> Result<Vec<u8>, anyhow::Error> {
 
 /// Get an image by id.
 #[actix_web::get("/images_by_id/{id}")]
-async fn get_image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>) -> Result<NamedFile, ServerError> {
+async fn get_image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>, _user: AuthenticatedUser) -> Result<NamedFile, ServerError> {
 	let image_id = path.into_inner().0;
 	let image_hash = match database::get_image_hash_from_id(&db_pool, image_id).await? {
 		Some(image_hash) => image_hash,
@@ -548,7 +568,7 @@ struct ListLogsQuery {
 
 /// List logs.
 #[actix_web::get("/logs")]
-async fn list_logs(db_pool: Data<PgPool>, query: web::Query<ListLogsQuery>) -> Result<HttpResponse, ServerError> {
+async fn list_logs(db_pool: Data<PgPool>, query: web::Query<ListLogsQuery>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let query = query.into_inner();
 
 	let logs = database::list_logs(&db_pool, query.image_hash, query.action, query.min_id, query.limit).await?;
@@ -559,7 +579,7 @@ async fn list_logs(db_pool: Data<PgPool>, query: web::Query<ListLogsQuery>) -> R
 
 /// List images with blame
 #[actix_web::get("/list_images_with_blame")]
-async fn list_images_with_blame(db_pool: Data<PgPool>, query: web::Query<ListImagesQuery>) -> Result<HttpResponse, ServerError> {
+async fn list_images_with_blame(db_pool: Data<PgPool>, query: web::Query<ListImagesQuery>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let query = query.into_inner();
 
 	let images = database::list_images_with_blame(&db_pool, query.min_id.unwrap_or(0), query.limit).await?;
@@ -572,12 +592,15 @@ async fn list_images_with_blame(db_pool: Data<PgPool>, query: web::Query<ListIma
 struct UploadImageForm {
 	#[multipart(rename = "file")]
 	files: Vec<TempFile>,
-	user: actix_multipart::form::text::Text<i64>,
 }
 
-
 #[actix_web::post("/upload_image")]
-async fn upload_image(db_pool: Data<PgPool>, MultipartForm(form): MultipartForm<UploadImageForm>) -> Result<HttpResponse, ServerError> {
+async fn upload_image(db_pool: Data<PgPool>, MultipartForm(form): MultipartForm<UploadImageForm>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	// Only admins can upload images
+	if !user.is_admin {
+		return Ok(HttpResponse::Forbidden().finish());
+	}
+
 	if form.files.len() != 1 {
 		return Ok(HttpResponse::BadRequest().finish());
 	}
@@ -659,7 +682,7 @@ async fn upload_image(db_pool: Data<PgPool>, MultipartForm(form): MultipartForm<
 	}
 
 	// Add the image to the database
-	if database::add_image(&db_pool, file_hash, *form.user).await?.is_err() {
+	if database::add_image(&db_pool, file_hash, user.id).await?.is_err() {
 		return Ok(HttpResponse::Conflict().reason("Database conflict").finish());
 	}
 
@@ -682,4 +705,50 @@ async fn hash_async_reader<R: tokio::io::AsyncRead + Unpin>(mut reader: R) -> Re
 	let hash = hasher.finalize();
 
 	Ok(ImageHash::from_bytes(hash.into()))
+}
+
+
+#[derive(Deserialize)]
+struct LoginQuery {
+	username: String,
+	login_key: LoginKey,
+}
+
+/// Create a login token
+#[actix_web::post("/login")]
+async fn login(db_pool: Data<PgPool>, data: web::Json<LoginQuery>) -> Result<HttpResponse, ServerError> {
+	let user_id = match database::authenticate_login(&db_pool, &data.username, data.login_key).await? {
+		Some(user_id) => user_id,
+		None => return Ok(HttpResponse::Unauthorized().finish()),
+	};
+
+	let user_token = database::create_user_token(&db_pool, user_id).await?;
+
+	Ok(HttpResponse::Ok().json(user_token))
+}
+
+
+
+#[derive(Deserialize)]
+struct ChangeLoginKeyQuery {
+	new_login_key: LoginKey,
+}
+
+/// Change a login key
+#[actix_web::post("/change_login_key")]
+async fn change_login_key(db_pool: Data<PgPool>, data: web::Json<ChangeLoginKeyQuery>, user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	let user_id = user.id;
+
+	database::change_login_key(&db_pool, user_id, data.new_login_key).await?;
+
+	Ok(HttpResponse::Ok().finish())
+}
+
+
+#[actix_web::get("/user_info")]
+async fn user_info(user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
+	Ok(HttpResponse::Ok().json(json!({
+		"id": user.id,
+		"is_admin": user.is_admin,
+	})))
 }

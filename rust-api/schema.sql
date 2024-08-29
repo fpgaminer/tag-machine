@@ -70,3 +70,19 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE INDEX IF NOT EXISTS logs_image_hash_idx ON logs USING HASH (image_hash);
 CREATE INDEX IF NOT EXISTS logs_user_id_idx ON logs (user_id);
+
+
+CREATE TABLE IF NOT EXISTS users (
+    id bigint PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    username text NOT NULL UNIQUE,
+    login_key bytea NOT NULL,   -- SHA256 hash of the user's login key
+    active boolean NOT NULL,
+    is_admin boolean NOT NULL
+);
+
+
+CREATE TABLE IF NOT EXISTS user_tokens (
+    token bytea NOT NULL PRIMARY KEY,   -- SHA256 hash of the user's login key
+    user_id bigint NOT NULL,
+    created_at bigint NOT NULL
+);
