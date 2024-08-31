@@ -10,3 +10,5 @@ __pycache__
 /pg-socket
 *.bin
 wiki_pages*.json
+/public-docker
+huggingface-cache

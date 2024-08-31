@@ -157,7 +157,11 @@ def load_vlm_model(model_path: Path):
 	config = yaml.safe_load((model_path / "config.yaml").read_text())
 
 	tokenizer = AutoTokenizer.from_pretrained(config['text_model'])
-	text_model = LlamaForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
+	if (model_path / "text_model").exists():
+		logging.info("Loading VLM's custom text model")
+		text_model = LlamaForCausalLM.from_pretrained(model_path / "text_model", device_map='cuda', torch_dtype=torch.bfloat16)
+	else:
+		text_model = LlamaForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
 	assert isinstance(text_model, LlamaForCausalLM)
 	text_model.eval()
 	#text_model.forward = torch.compile(text_model.forward, mode="reduce-overhead", fullgraph=True)
@@ -226,7 +230,8 @@ def run_vlm_model(tokenizer, text_model, clip_processor, clip_model, image_adapt
 	print(input_ids)
 
 	#generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=False, suppress_tokens=None)
-	generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, top_k=10, temperature=0.2, suppress_tokens=None)
+	#generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, top_k=10, temperature=0.2, suppress_tokens=None)
+	generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, suppress_tokens=None)   # Uses the default which is temp=0.6, top_p=0.9
 
 	# Trim off the prompt
 	generate_ids = generate_ids[:, input_ids.shape[1]:]

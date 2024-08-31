@@ -1,9 +1,3 @@
-{
-	servers {
-		enable_full_duplex
-	}
-}
-
 :80 {
 	#root * /srv
 	#file_server
@@ -23,16 +17,7 @@
 	}
 
 	handle {
-		reverse_proxy web-dev:3000 :9999 {
-			lb_policy first
-
-			health_uri /
-			health_interval 30s
-			health_timeout 2s
-			health_status 2xx
-			health_headers {
-				Accept */*
-			}
+		reverse_proxy :9999 {
 		}
 
 	}

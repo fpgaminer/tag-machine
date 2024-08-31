@@ -24,7 +24,7 @@ function CaptionEditor() {
 	const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
 	const [localCaption, setLocalCaption] = useState(currentText ?? "");
 
-	const tokens = llama3Tokenizer.encode(localCaption);
+	const tokens = llama3Tokenizer.encode(localCaption, undefined);
 
 	const clip_tokens = tokenizer.encode(localCaption, null, { add_special_tokens: false });
 

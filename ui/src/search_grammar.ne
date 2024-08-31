@@ -14,7 +14,7 @@ const lexer = moo.compile({
 	lparen: /\(/,
 	rparen: /\)/,
     sort: /sort:/,
-    id: /id/,
+    id_id: /id/,
     hash: /hash/,
     null_token: /NULL/,
     quoted_string: /"(?:\\["\\]|[^\n"\\])*"/,
@@ -40,7 +40,7 @@ paren -> %lparen %ws:? expr %ws:? %rparen  {% d => d[2] %}
        | %word %equal %quoted_string       {% d => ({ kind: "attribute", value: [d[0].value, d[2].value.slice(1, -1)] }) %}
        | %word %equal %word                {% d => ({ kind: "attribute", value: [d[0].value, d[2].value] }) %}
        | %word %equal %null_token          {% d => ({ kind: "attribute", value: [d[0].value, null] }) %}
-       | %id %equal %word                  {% d => ({ kind: "attribute", value: ["id", d[2].value] }) %}
+       | %id_id %equal %word               {% d => ({ kind: "attribute", value: ["id", d[2].value] }) %}
        | %hash %equal %word                {% d => ({ kind: "attribute", value: ["hash", d[2].value] }) %}
 
 not -> %not %ws:? paren                    {% d => ({ kind: "not", value: d[2] }) %}
@@ -52,5 +52,5 @@ term -> term %ws:? %and %ws:? not          {% d => ({ kind: "and", value: [d[0],
 expr -> expr %ws:? %or %ws:? term          {% d => ({ kind: "or", value: [d[0], d[4]] }) %}
       | term                               {% d => d[0] %}
 
-sort -> %sort %id                          {% d => "id" %}
+sort -> %sort %id_id                       {% d => "id" %}
       | %sort %hash                        {% d => "hash" %}
