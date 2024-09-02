@@ -35,6 +35,19 @@ class ImageListState {
 	setCurrentSearch(search: string) {
 		const changed = this._currentSearch.search != search;
 
+		// Restore current image ID if it was saved
+		if (changed || currentImageState.imageId === null) {
+			const currentImageIdForSearch = JSON.parse(localStorage.getItem("currentImageIdForSearch") ?? "{}") as Record<
+				string,
+				string
+			>;
+
+			if (currentImageIdForSearch[search] !== undefined) {
+				const image_id = parseInt(currentImageIdForSearch[search]);
+				currentImageState.imageId = image_id;
+			}
+		}
+
 		if (!changed) {
 			return;
 		}
@@ -57,17 +70,6 @@ class ImageListState {
 		}
 
 		localStorage.setItem("searchHistory", JSON.stringify(this.searchHistory));
-
-		// Restore current image ID if it was saved
-		const currentImageIdForSearch = JSON.parse(localStorage.getItem("currentImageIdForSearch") ?? "{}") as Record<
-			string,
-			string
-		>;
-
-		if (currentImageIdForSearch[search] !== undefined) {
-			const image_id = parseInt(currentImageIdForSearch[search]);
-			currentImageState.imageId = image_id;
-		}
 
 		// Clear the current cache of search results
 		this.searchList.length = 0;
