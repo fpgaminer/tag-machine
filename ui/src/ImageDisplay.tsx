@@ -3,11 +3,12 @@ import { errorMessageState, imageHashToUrl, imageResolutionState } from "./state
 import { currentImageState } from "./state/CurrentImage";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import React, { useEffect, useState } from "react";
+import { authState } from "./state/Auth";
 
 function ImageDisplay() {
 	const [imageData, setImageData] = useState<string | null>(null);
 	const currentImage = currentImageState.image;
-	const userToken = localStorage.getItem("user_token");
+	const userToken = authState.user_token;
 
 	useEffect(() => {
 		if (currentImage !== null && userToken !== null) {

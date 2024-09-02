@@ -4,6 +4,7 @@ import { imageListState } from "./state/ImageList";
 import { tagListState } from "./state/TagList";
 import { currentImageState } from "./state/CurrentImage";
 import { scryptAsync } from "@noble/hashes/scrypt";
+import { authState, checkIfLoggedIn } from "./state/Auth";
 
 export const IMAGE_LIST_FETCH_SIZE = 256;
 
@@ -145,25 +146,6 @@ class WindowState {
 }
 
 export const windowState = new WindowState();
-
-/* Login State */
-class LoginState {
-	loggedIn: boolean = false;
-
-	constructor() {
-		if (localStorage.getItem("user_token") !== null) {
-			this.loggedIn = true;
-		}
-
-		makeAutoObservable(this);
-	}
-
-	setLoggedIn(loggedIn: boolean) {
-		this.loggedIn = loggedIn;
-	}
-}
-
-export const loginState = new LoginState();
 
 /* WikiPopupState */
 class WikiPopupState {
@@ -417,7 +399,7 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 autorun(() => {
 	const searchList = imageListState.searchList;
 	const currentImageIndex = currentImageState.searchIndex;
-	const user_token = localStorage.getItem("user_token");
+	const user_token = authState.user_token;
 
 	if (searchList === null || currentImageIndex === null) {
 		return;
@@ -468,19 +450,13 @@ autorun(() => {
 export async function fetchTagSuggestions(image: ImageObject): Promise<[TagSuggestion[], number] | null> {
 	const aliases = tagListState.aliases;
 	const blacklistAndDeprecations = tagListState.blacklistAndDeprecations;
-	let data;
 
 	if (aliases === null || blacklistAndDeprecations === null) {
 		console.warn("Model tags or tag mappings not loaded yet, can't predict");
 		return null;
 	}
 
-	try {
-		data = await api.getTagSuggestions(image.hash);
-	} catch (error) {
-		errorMessageState.setErrorMessage(`Error fetching tag suggestions: ${error as string}`);
-		return null;
-	}
+	const data = await api.getTagSuggestions(image.hash);
 
 	const tagSuggestions = new Map<string, TagSuggestion>();
 
@@ -506,12 +482,9 @@ export async function fetchTagSuggestions(image: ImageObject): Promise<[TagSugge
 // Initialize the state
 export async function initState() {
 	const savedSearch = localStorage.getItem("currentSearch");
-	//const savedCurrentImageId = parseInt(localStorage.getItem("currentImageId") ?? "0");
-	//const savedCurrentImageHash = localStorage.getItem("currentImageHash");
 
-	// First, load up essential metadata that is needed by everything else
-	console.log("initState: fetching tag lists");
-	await Promise.all([tagListState.fetchTagList()]);
+	// Check if we're logged in
+	await checkIfLoggedIn();
 
 	// Restore search
 	console.log(`initState: restoring search:`, savedSearch);
@@ -522,44 +495,6 @@ export async function initState() {
 			errorMessageState.setErrorMessage(`Error restoring search: ${error as string}`);
 			imageListState.setCurrentSearch("");
 		}
-	}
-
-	//currentImageState.imageId = savedCurrentImageId;
-
-	await imageListState.performSearch();
-
-	// Restore current image
-	/*console.log(`initState: restoring current image:`, savedCurrentImageHash);
-	let minId = null;
-	if (savedCurrentImageHash !== null && savedCurrentImageHash != "") {
-		currentImageState.imageHash = savedCurrentImageHash;
-
-		// Get that image's id, so we can perform a search around it
-		const image = await api.getImageByHash(savedCurrentImageHash);
-		if (image !== null) {
-			minId = image.id;
-		}
-	}
-
-	minId = minId ?? 0;
-
-	// Query the server
-	//await imageListState.performSearch(Math.max(0, savedSearchIndex - Math.floor(IMAGE_LIST_FETCH_SIZE / 2)));
-	await imageListState.performSearch(minId - Math.floor(IMAGE_LIST_FETCH_SIZE / 2), null);*/
-
-	// Check if we're logged in
-	try {
-		const user_info = await api.user_info();
-
-		if (user_info === null) {
-			loginState.setLoggedIn(false);
-		}
-		else {
-			console.log("Logged in as", user_info.id);
-		}
-	}
-	catch (error) {
-		errorMessageState.setErrorMessage(`Error checking login status: ${error as string}`);
 	}
 }
 
@@ -580,15 +515,28 @@ export async function login(username: string, password: string | null, key: stri
 
 	const user_token = await api.login(username, login_key);
 
-	// Save the token
-	localStorage.setItem("user_token", user_token);
+	authState.setToken(user_token);
 }
 
 // Automatically switch to login screen if not logged in, or to tagging screen if logged in
 autorun(() => {
-	if (loginState.loggedIn) {
+	if (authState.loggedIn === true && windowState.state === WindowStates.Login) {
 		windowState.setWindowState(WindowStates.Tagging);
-	} else {
+	}
+	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login) {
 		windowState.setWindowState(WindowStates.Login);
+	}
+});
+
+// Fetch metadata when logging in
+autorun(() => {
+	if (authState.loggedIn === true && tagListState.fetched === false) {
+		tagListState.fetchTagList();
+	}
+
+	if (authState.loggedIn === true && imageListState.initialSearchPerformed === false) {
+		imageListState.performSearch().then(() => {
+			imageListState.setInitialSearchPerformed();
+		});
 	}
 });

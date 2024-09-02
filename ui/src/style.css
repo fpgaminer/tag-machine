@@ -652,3 +652,72 @@ li p {
 	margin: 10px 10px 10px 10px;
 	border: none;
 }
+
+
+
+/* Login Form */
+/* Login Form Styling */
+.loginForm {
+    background-color: #2b2b2b;
+    padding: 20px;
+    border-radius: 8px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    color: #f0f0f0;
+    font-family: 'Noto Sans', sans-serif;
+	width: 300px;
+	max-height: 400px;
+	margin: auto;
+}
+
+.loginForm div {
+    width: 100%;
+    display: flex;
+    flex-direction: column;
+    margin-bottom: 10px;
+}
+
+.loginForm div > input {
+    padding: 10px;
+    border-radius: 5px;
+    border: none;
+    font-size: 1em;
+    background-color: #3f3f3f;
+    color: #f0f0f0;
+}
+
+.loginForm div > input:focus {
+    outline: none;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+.loginForm button {
+    width: 100%;
+    padding: 10px;
+    background-color: #4caf50;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 1em;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+    text-transform: uppercase;
+    font-weight: bold;
+}
+
+.loginForm button:hover {
+    background-color: #45a049;
+}
+
+.loginForm button:active {
+    transform: scale(0.98);
+}
+
+.loginForm div > label {
+    margin-bottom: 5px;
+    font-size: 0.9em;
+    color: #bbbbbb;
+}

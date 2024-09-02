@@ -8,6 +8,7 @@ class TagListState {
 	aliases: Map<string, string> | null = null;
 	implications: Map<string, Set<string>> | null = null;
 	blacklistAndDeprecations: Set<string> | null = null;
+	fetched: boolean = false;
 
 	constructor() {
 		makeAutoObservable(this);
@@ -46,6 +47,7 @@ class TagListState {
 			this.aliases = aliases;
 			this.implications = implications;
 			this.blacklistAndDeprecations = blacklistAndDeprecations;
+			this.fetched = true;
 		});
 	}
 
@@ -148,6 +150,10 @@ class TagListState {
 				this.tags.push(new Tag(tag.id, tag.name, tag.active));
 			});
 		}
+	}
+
+	setFetched(fetched: boolean) {
+		this.fetched = fetched;
 	}
 }
 

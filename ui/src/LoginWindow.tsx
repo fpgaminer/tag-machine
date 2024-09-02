@@ -17,24 +17,26 @@ function LoginWindow() {
 			}
 			else {
 				errorMessageState.setErrorMessage("Please enter a password or key");
+				return;
 			}
 		}
 		catch (error) {
 			errorMessageState.setErrorMessage(`Error logging in: ${error as string}`);
+			return;
 		}
 	}
 
 	return (
 		<div className="row remainingSpace">
 			<div className="column remainingSpace spacing-5"></div>
-			<div className="column spacing-5">
+			<div className="column spacing-5 loginForm">
 				<div>Username:</div>
-				<input type="text" onChange={(e) => setUsername(e.target.value)} value={username} />
+				<div><input type="text" onChange={(e) => setUsername(e.target.value)} value={username} /></div>
 				<div>Password:</div>
-				<input type="password" onChange={(e) => setPassword(e.target.value)} value={password} />
+				<div><input type="password" onChange={(e) => setPassword(e.target.value)} value={password} /></div>
 				<div>Key:</div>
-				<input type="password" onChange={(e) => setKey(e.target.value)} value={key} />
-				<button onClick={onLoginClicked}>Login</button>
+				<div><input type="password" onChange={(e) => setKey(e.target.value)} value={key} /></div>
+				<div><button onClick={onLoginClicked}>Login</button></div>
 			</div>
 			<div className="column remainingSpace spacing-5"></div>
 		</div>

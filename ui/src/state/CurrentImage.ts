@@ -1,5 +1,5 @@
 import { makeAutoObservable, runInAction } from "mobx";
-import { ImageObject, Tag, TagSuggestion, fetchTagSuggestions } from "../state";
+import { ImageObject, Tag, TagSuggestion, errorMessageState, fetchTagSuggestions } from "../state";
 import { imageListState } from "./ImageList";
 import { tagListState } from "./TagList";
 
@@ -7,6 +7,7 @@ export class CurrentImageState {
 	private _imageId: number | null = null;
 	suggestedTags: TagSuggestion[] | null = null;
 	suggestedTagsInFlight = false;
+	serverDown: boolean = false;
 
 	constructor() {
 		makeAutoObservable(this);
@@ -48,6 +49,7 @@ export class CurrentImageState {
 
 	async fetchTagSuggestions() {
 		const currentImage = this.image;
+		let result: [TagSuggestion[], number] | null = null;
 
 		if (currentImage === null) {
 			return;
@@ -58,15 +60,29 @@ export class CurrentImageState {
 			this.setSuggestedTagsInFlight(currentImage);
 		});
 
-		const result = await fetchTagSuggestions(currentImage);
-
-		if (result !== null) {
-			console.log(`Got tag suggestions for ${result[1]}`);
-
-			runInAction(() => {
-				this.setSuggestedTags(result[0], currentImage);
-			});
+		try {
+			result = await fetchTagSuggestions(currentImage);
+		} catch (error) {
+			// Check if it's a 502 error
+			if (error instanceof Response && error.status === 502) {
+				// If it is, don't show an error message
+				runInAction(() => {
+					this.serverDown = true;
+				});
+				return;
+			}
+			
+			errorMessageState.setErrorMessage(`Error fetching tag suggestions: ${error as string}`);
+			return;
 		}
+
+		runInAction(() => {
+			if (result !== null) {
+				console.log(`Got tag suggestions for ${result[1]}`);
+				this.setSuggestedTags(result[0], currentImage);
+				this.serverDown = false;
+			}
+		});
 	}
 
 	setSuggestedTagsInFlight(forImage: ImageObject) {

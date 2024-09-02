@@ -11,9 +11,14 @@ export interface TagAssociation {
 
 class TagAssociationState {
 	tags: TagAssociation[] = [];
+	serverDown: boolean = false;
 
 	constructor() {
 		makeAutoObservable(this);
+	}
+
+	setServerDown(serverDown: boolean) {
+		this.serverDown = serverDown;
 	}
 }
 
@@ -45,6 +50,15 @@ autorun(
 		try {
 			associations = await api.getTagImageAssociations(tags, currentImageHash);
 		} catch (error) {
+			// Check if it's a 502 error
+			if (error instanceof Response && error.status === 502) {
+				// If it is, don't show an error message
+				runInAction(() => {
+					tagAssociationState.setServerDown(true);
+				});
+				return;
+			}
+
 			errorMessageState.setErrorMessage(`Error fetching tag associations: ${error as string}`);
 			return;
 		}
@@ -66,6 +80,7 @@ autorun(
 
 		runInAction(() => {
 			tagAssociationState.tags = tagAssociations;
+			tagAssociationState.setServerDown(false);
 		});
 	},
 	{ delay: 1000 }

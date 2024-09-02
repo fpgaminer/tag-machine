@@ -6,10 +6,14 @@ import { currentImageState } from "./state/CurrentImage";
 
 function TagList() {
 	const suggestedTags = currentImageState.suggestedTags;
+	const serverDown = currentImageState.serverDown;
 
 	let contents = <p>Loading...</p>;
 
-	if (suggestedTags !== null) {
+	if (serverDown === true) {
+		contents = <p>Prediction server is currently offline</p>;
+	}
+	else if (suggestedTags !== null) {
 		// Sort by score, descending
 		const sortedSuggestions = suggestedTags.slice();
 		sortedSuggestions.sort((a, b) => b.score - a.score);

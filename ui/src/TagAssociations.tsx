@@ -5,10 +5,14 @@ import { Tag } from "./state";
 
 function AssociationTagList() {
 	const associations = tagAssociationState.tags;
+	const serverDown = tagAssociationState.serverDown;
 
 	let contents = <p>Loading...</p>;
 
-	if (associations !== null) {
+	if (serverDown) {
+		contents = <p>Prediction server is currently offline</p>;
+	}
+	else if (associations !== null) {
 		const tags = associations.map((tag) => tag.tag);
 		const tagIdToScoreMap = new Map<number, number>();
 
