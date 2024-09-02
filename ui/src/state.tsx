@@ -128,13 +128,13 @@ export const errorMessageState = new ErrorMessageState();
 
 /* WindowStates */
 export enum WindowStates {
-	Login,
-	Tagging,
-	Captioning,
+	Login = "login",
+	Tagging = "tagging",
+	Captioning = "captioning",
 }
 
 class WindowState {
-	state: WindowStates = WindowStates.Login;
+	state: WindowStates | null = null;
 
 	constructor() {
 		makeAutoObservable(this);
@@ -142,6 +142,19 @@ class WindowState {
 
 	setWindowState(state: WindowStates) {
 		this.state = state;
+
+		if (state !== WindowStates.Login) {
+			localStorage.setItem("lastWindowState", state);
+		}
+	}
+
+	restoreWindowState() {
+		const lastWindowState = localStorage.getItem("lastWindowState");
+
+		if (lastWindowState !== null) {
+			const newState = Object.values(WindowStates).includes(lastWindowState as WindowStates) ? lastWindowState as WindowStates : WindowStates.Tagging;
+			this.state = newState;
+		}
 	}
 }
 
@@ -518,10 +531,10 @@ export async function login(username: string, password: string | null, key: stri
 	authState.setToken(user_token);
 }
 
-// Automatically switch to login screen if not logged in, or to tagging screen if logged in
+// Automatically switch to login screen if not logged in, or away from login screen if logged in
 autorun(() => {
-	if (authState.loggedIn === true && windowState.state === WindowStates.Login) {
-		windowState.setWindowState(WindowStates.Tagging);
+	if (authState.loggedIn === true && (windowState.state === WindowStates.Login || windowState.state === null)) {
+		windowState.restoreWindowState();
 	}
 	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login) {
 		windowState.setWindowState(WindowStates.Login);

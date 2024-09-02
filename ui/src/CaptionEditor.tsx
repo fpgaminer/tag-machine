@@ -9,23 +9,20 @@ import { AutoTokenizer } from '@xenova/transformers';
 const tokenizer = await AutoTokenizer.from_pretrained('openai/clip-vit-large-patch14');
 
 enum CaptionMode {
-	StandardCaption,
-	TrainingPrompt,
+	StandardCaption = "StandardCaption",
+	TrainingPrompt = "TrainingPrompt",
 }
 
 function CaptionEditor() {
 	const image = currentImageState.image;
 	const imageCaption = image ? image.caption : null;
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
-	//const [caption, setCaption] = useState(imageCaption ? imageCaption : "");
-	//const [tokenCnt, setTokenCnt] = useState(0);
 	const [saving, setSaving] = useState(0);
-	const [captionMode, setCaptionMode] = useState(CaptionMode.StandardCaption);
+	const [captionMode, setCaptionMode] = useState(getSavedCaptionMode());
 	const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
 	const [localCaption, setLocalCaption] = useState(currentText ?? "");
 
 	const tokens = llama3Tokenizer.encode(localCaption, undefined);
-
 	const clip_tokens = tokenizer.encode(localCaption, null, { add_special_tokens: false });
 
 	// Update the caption when the current image changes
@@ -42,14 +39,6 @@ function CaptionEditor() {
 		[captionMode]
 	);
 
-	//const caption = currentImageState.image ? currentImageState.image.caption : "";
-
-	//let contents = <p>Loading...</p>;
-
-	/*if (caption !== null) {
-		contents = <div>{caption}</div>;
-	}*/
-
 	async function onSaveClicked() {
 		if (image === null) {
 			console.error("No image selected, cannot save caption");
@@ -63,7 +52,6 @@ function CaptionEditor() {
 		else if (captionMode === CaptionMode.TrainingPrompt) {
 			await setImageTrainingPrompt(image, localCaption);
 		}
-		//await captionImage(image, caption);
 		setSaving(2);
 		setTimeout(() => {
 			setSaving(0);
@@ -95,7 +83,9 @@ function CaptionEditor() {
 	}
 
 	function onCaptionModeChange(event: React.ChangeEvent<HTMLSelectElement>) {
-		setCaptionMode(parseInt(event.target.value) as CaptionMode);
+		const new_mode = CaptionMode[event.target.value as keyof typeof CaptionMode];
+		setCaptionMode(new_mode);
+		localStorage.setItem("captionMode", new_mode);
 	}
 
 	return (
@@ -118,6 +108,16 @@ function CaptionEditor() {
 			</div>
 		</div>
 	);
+}
+
+function getSavedCaptionMode(): CaptionMode {
+	const savedMode = localStorage.getItem("captionMode");
+
+	if (savedMode === null) {
+		return CaptionMode.StandardCaption;
+	}
+	
+	return Object.values(CaptionMode).includes(savedMode as CaptionMode) ? savedMode as CaptionMode : CaptionMode.StandardCaption;
 }
 
 export default observer(CaptionEditor);
