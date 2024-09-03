@@ -7,6 +7,7 @@ __pycache__
 /elastic-search-junk
 /old-git
 *.pt
+*.safetensors
 /pg-socket
 *.bin
 wiki_pages*.json

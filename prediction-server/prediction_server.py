@@ -14,7 +14,7 @@ from PIL import Image
 import torchvision.transforms.functional as TF
 import concurrent.futures
 import argparse
-from transformers import AutoTokenizer, LlamaForCausalLM, AutoProcessor, AutoModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModel
 from torch import nn
 import yaml
 
@@ -36,7 +36,8 @@ parser.add_argument('--tag-assoc-model', type=str, default='tag_assoc_models/5kc
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-gfw8glv4-49920')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-i0g1cgpe-599808')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9i6xt5iz-49920')
-parser.add_argument('--vlm-model', type=str, default='models/joy-caption-1zjx0z2i-499968')
+#parser.add_argument('--vlm-model', type=str, default='models/joy-caption-1zjx0z2i-499968')
+parser.add_argument('--vlm-model', type=str, default='models/joy-caption-rx4ifbpo-499968')
 
 
 IMAGE_DIR = Path('../rust-api/images')
@@ -159,10 +160,10 @@ def load_vlm_model(model_path: Path):
 	tokenizer = AutoTokenizer.from_pretrained(config['text_model'])
 	if (model_path / "text_model").exists():
 		logging.info("Loading VLM's custom text model")
-		text_model = LlamaForCausalLM.from_pretrained(model_path / "text_model", device_map='cuda', torch_dtype=torch.bfloat16)
+		text_model = AutoModelForCausalLM.from_pretrained(model_path / "text_model", device_map='cuda', torch_dtype=torch.bfloat16)
 	else:
-		text_model = LlamaForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
-	assert isinstance(text_model, LlamaForCausalLM)
+		text_model = AutoModelForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
+	#assert isinstance(text_model, LlamaForCausalLM)
 	text_model.eval()
 	#text_model.forward = torch.compile(text_model.forward, mode="reduce-overhead", fullgraph=True)
 
@@ -172,6 +173,12 @@ def load_vlm_model(model_path: Path):
 	if (Path(model_path) / "vision_model.pt").exists():
 		logging.info("Loading VLM's custom vision model")
 		checkpoint = torch.load(Path(model_path) / "vision_model.pt", map_location='cpu')
+		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
+		clip_model.load_state_dict(checkpoint)
+		del checkpoint
+	elif (Path(model_path) / "clip_model.pt").exists():
+		logging.info("Loading VLM's custom vision model")
+		checkpoint = torch.load(Path(model_path) / "clip_model.pt", map_location='cpu')
 		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
 		clip_model.load_state_dict(checkpoint)
 		del checkpoint

@@ -3,7 +3,7 @@ FROM nvcr.io/nvidia/pytorch:24.05-py3
 
 # Install dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends libwebp-dev libwebp7
-RUN pip install --upgrade Flask flask-cors transformers Pillow accelerate sentencepiece
+RUN pip install --upgrade Flask flask-cors transformers Pillow accelerate sentencepiece peft
 
 WORKDIR /app
 

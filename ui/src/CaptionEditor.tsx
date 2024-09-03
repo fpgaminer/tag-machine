@@ -13,15 +13,40 @@ enum CaptionMode {
 	TrainingPrompt = "TrainingPrompt",
 }
 
+enum SaveButtonState {
+	Idle = 0,
+	Saving = 1,
+	Saved = 2,
+}
+
 function CaptionEditor() {
+	// The current image and its captions (according to the server)
 	const image = currentImageState.image;
 	const imageCaption = image ? image.caption : null;
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
-	const [saving, setSaving] = useState(0);
-	const [captionMode, setCaptionMode] = useState(getSavedCaptionMode());
-	const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
-	const [localCaption, setLocalCaption] = useState(currentText ?? "");
 
+	// Save button state
+	const [saving, setSaving] = useState(SaveButtonState.Idle);
+
+	// Caption mode
+	const [captionMode, setCaptionMode] = useState(getSavedCaptionMode());
+
+	// Image caption based on the current caption mode
+	const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
+
+	// User edits are saved temporarily to localStorage, fetch it if it exists
+	const localStorageCaption = (image !== null) ? getLocalStorageCaption(image.id, captionMode) : null;
+
+	// If the user has unsaved edits, use that as the caption text
+	const revertCaptionText = localStorageCaption ?? currentText ?? "";
+
+	// Our local text state
+	const [localCaption, setLocalCaption] = useState(revertCaptionText);
+
+	// Check if the local caption is different from the current caption (and thus unsaved)
+	const isUnsaved = localCaption != (currentText ?? "");
+
+	// Count tokens
 	const tokens = llama3Tokenizer.encode(localCaption, undefined);
 	const clip_tokens = tokenizer.encode(localCaption, null, { add_special_tokens: false });
 
@@ -33,8 +58,10 @@ function CaptionEditor() {
 				const imageCaption = image ? image.caption : null;
 				const imageTrainingPrompt = image ? image.trainingPrompt : null;
 				const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
+				const localStorageCaption = (image !== null) ? getLocalStorageCaption(image.id, captionMode) : null;
+				const revertCaptionText = localStorageCaption ?? currentText ?? "";
 
-				setLocalCaption(currentText ? currentText : "");
+				setLocalCaption(revertCaptionText);
 			}),
 		[captionMode]
 	);
@@ -45,24 +72,34 @@ function CaptionEditor() {
 			return;
 		}
 
-		setSaving(1);
+		// Set state to saving
+		setSaving(SaveButtonState.Saving);
+
+		// Save the caption to the server
 		if (captionMode === CaptionMode.StandardCaption) {
 			await captionImage(image, localCaption);
 		}
 		else if (captionMode === CaptionMode.TrainingPrompt) {
 			await setImageTrainingPrompt(image, localCaption);
 		}
-		setSaving(2);
+
+		// Set state to saved and clear after a delay
+		setSaving(SaveButtonState.Saved);
 		setTimeout(() => {
-			setSaving(0);
+			setSaving(SaveButtonState.Idle);
 		}, 1000);
+
+		// Clear the local storage caption
+		clearLocalStorageCaption(image.id, captionMode);
 	}
 
 	function onRevertClicked() {
+		// Revert to the server caption
 		if (image === null) {
 			return;
 		}
 
+		clearLocalStorageCaption(image.id, captionMode);
 		setLocalCaption(currentText ?? "");
 	}
 
@@ -80,12 +117,36 @@ function CaptionEditor() {
 
 	function onCaptionChange(event: React.ChangeEvent<HTMLTextAreaElement>) {
 		setLocalCaption(event.target.value);
+
+		if (image !== null) {
+			if (event.target.value === currentText) {
+				clearLocalStorageCaption(image.id, captionMode);
+			}
+			else {
+				saveLocalStorageCaption(image.id, captionMode, event.target.value);
+			}
+		}
 	}
 
 	function onCaptionModeChange(event: React.ChangeEvent<HTMLSelectElement>) {
 		const new_mode = CaptionMode[event.target.value as keyof typeof CaptionMode];
 		setCaptionMode(new_mode);
 		localStorage.setItem("captionMode", new_mode);
+	}
+
+	let saveButtonText;
+
+	if (saving === SaveButtonState.Idle && isUnsaved) {
+		saveButtonText = "Save";
+	}
+	else if (saving === SaveButtonState.Idle) {
+		saveButtonText = "Unchanged";
+	}
+	else if (saving === SaveButtonState.Saving) {
+		saveButtonText = "Saving...";
+	}
+	else if (saving === SaveButtonState.Saved) {
+		saveButtonText = "Saved";
 	}
 
 	return (
@@ -99,7 +160,7 @@ function CaptionEditor() {
 					</select>
 					<button onClick={onSuggestClicked}>Suggest</button>
 					<button onClick={onRevertClicked}>Revert</button>
-					<button onClick={onSaveClicked}>{saving === 0 ? "Save" : saving === 1 ? "Saving..." : "Saved"}</button>
+					<button onClick={onSaveClicked}>{saveButtonText}</button>
 				</div>
 			</div>
 			<div className="remainingSpace captionEditor">
@@ -118,6 +179,21 @@ function getSavedCaptionMode(): CaptionMode {
 	}
 	
 	return Object.values(CaptionMode).includes(savedMode as CaptionMode) ? savedMode as CaptionMode : CaptionMode.StandardCaption;
+}
+
+function clearLocalStorageCaption(imageId: number, captionMode: CaptionMode) {
+	const k = `userCaptionEdits-${imageId}-${captionMode}`;
+	localStorage.removeItem(k);
+}
+
+function saveLocalStorageCaption(imageId: number, captionMode: CaptionMode, caption: string) {
+	const k = `userCaptionEdits-${imageId}-${captionMode}`;
+	localStorage.setItem(k, caption);
+}
+
+function getLocalStorageCaption(imageId: number, captionMode: CaptionMode): string | null {
+	const k = `userCaptionEdits-${imageId}-${captionMode}`;
+	return localStorage.getItem(k);
 }
 
 export default observer(CaptionEditor);
