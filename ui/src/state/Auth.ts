@@ -5,6 +5,7 @@ import { errorMessageState } from "../state";
 class AuthState {
 	user_token: string | null = null;
 	loggedIn: boolean | null = null;   // Null if we don't know yet
+	userInfo: api.ApiUserInfo | null = null;
 
 	constructor() {
 		const stored_token = localStorage.getItem("user_token");
@@ -30,19 +31,31 @@ class AuthState {
 	setLoggedIn(loggedIn: boolean) {
 		this.loggedIn = loggedIn;
 	}
+
+	setUserInfo(userInfo: api.ApiUserInfo) {
+		this.userInfo = userInfo;
+	}
 }
 
 export const authState = new AuthState();
 
 export async function checkIfLoggedIn() {
+	console.log("Checking if logged in");
 	if (authState.user_token === null) {
+		console.log("No token, not logged in");
 		authState.setLoggedIn(false);
 		return;
 	}
 
 	try {
-		const user_info = api.user_info();
+		const user_info = await api.user_info();
+		console.log("User info:", user_info);
+		console.log("Setting logged in to", user_info !== null);
 		authState.setLoggedIn(user_info !== null);
+
+		if (user_info !== null) {
+			authState.setUserInfo(user_info);
+		}
 	}
 	catch (error) {
 		authState.setLoggedIn(false);

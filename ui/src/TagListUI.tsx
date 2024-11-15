@@ -6,6 +6,7 @@ interface TagListUIProps {
 	tags: Tag[];
 	formatter?: (tag: Tag) => string;
 	getControls?: (tag: Tag) => JSX.Element;
+	readonly?: boolean;
 }
 
 function TagListUI(props: TagListUIProps) {
@@ -14,7 +15,7 @@ function TagListUI(props: TagListUIProps) {
 	const currentImageTagMap = currentImageState.tagMap;
 
 	function onTagClicked(tag: Tag) {
-		if (currentImage === null) {
+		if (props.readonly || currentImage === null) {
 			return;
 		}
 

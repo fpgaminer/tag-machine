@@ -2,7 +2,6 @@ import { useObserver } from "mobx-react";
 import add24Filled from "@iconify/icons-fluent/add-24-filled";
 import arrowUpload24Filled from "@iconify/icons-fluent/arrow-upload-24-filled";
 import info24Regular from "@iconify/icons-fluent/info-24-regular";
-import arrowSwap24Filled from "@iconify/icons-fluent/arrow-swap-24-filled";
 import arrowDownload4Filled from "@iconify/icons-fluent/arrow-download-24-filled";
 import { Icon } from "@iconify/react";
 import { tagListState } from "./state/TagList";
@@ -18,12 +17,14 @@ import {
 	imageHashToUrl,
 } from "./state";
 import { currentImageState } from "./state/CurrentImage";
+import { API_URL, authenticatedFetch } from "./api";
 
 function Menu() {
 	const currentSearchText = useObserver(() => imageListState.currentSearch);
 	const [searchText, setSearchText] = React.useState(currentSearchText);
 	const currentImage = useObserver(() => currentImageState.image);
 	const currentMode = useObserver(() => windowState.state);
+	const currentModeValue = currentMode ?? WindowStates.Tagging;
 	const currentImageResolution = useObserver(() => imageResolutionState.resolution);
 	const searchHistory = useObserver(() => imageListState.searchHistory);
 
@@ -67,12 +68,9 @@ function Menu() {
 		uploadPopupState.setUploadPopupVisible(true);
 	}
 
-	function toggleModeClicked() {
-		if (currentMode === WindowStates.Tagging) {
-			windowState.setWindowState(WindowStates.Captioning);
-		} else {
-			windowState.setWindowState(WindowStates.Tagging);
-		}
+	function onModeChanged(event: React.ChangeEvent<HTMLSelectElement>) {
+		const newMode = event.target.value as WindowStates;
+		windowState.setWindowState(newMode);
 	}
 
 	function onResolutionChanged(event: React.ChangeEvent<HTMLSelectElement>) {
@@ -81,14 +79,26 @@ function Menu() {
 		imageResolutionState.setResolution(resolution);
 	}
 
+	async function onDownloadClicked() {
+		if (currentImage === null) {
+			return;
+		}
+
+		try {
+			await downloadImage(currentImage.hash);
+		} catch (e) {
+			errorMessageState.setErrorMessage(`Failed to download image: ${e as string}`);
+		}
+	}
+
 	const download_url = currentImage === null ? "" : imageHashToUrl(currentImage.hash);
 
 	return (
 		<div className="menu">
 			<div className="menu-item">
-				<a href={download_url} download className="menu-button">
+				<button className="menu-button" onClick={onDownloadClicked}>
 					<Icon icon={arrowDownload4Filled} />
-				</a>
+				</button>
 			</div>
 			<div className="menu-item">
 				<select value={currentImageResolution?.toString() ?? ""} onChange={onResolutionChanged}>
@@ -98,10 +108,11 @@ function Menu() {
 				</select>
 			</div>
 			<div className="menu-item">
-				<button className="menu-button" onClick={toggleModeClicked}>
-					<Icon icon={arrowSwap24Filled} />
-					<p>{currentMode === WindowStates.Tagging ? "Switch to Captioning Mode" : "Switch to Tagging Mode"}</p>
-				</button>
+				<select value={currentModeValue} onChange={onModeChanged}>
+					<option value={WindowStates.Tagging}>Tagging Mode</option>
+					<option value={WindowStates.Captioning}>Captioning Mode</option>
+					<option value={WindowStates.Vqa}>VQA Mode</option>
+				</select>
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={uploadClicked}>
@@ -140,6 +151,24 @@ function Menu() {
 			</div>
 		</div>
 	);
+}
+
+async function downloadImage(hash: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${hash}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to download image: ${response.status} ${response.statusText}`);
+	}
+
+	const blob = await response.blob();
+	const url = window.URL.createObjectURL(blob);
+	const a = document.createElement("a");
+	a.href = url;
+	a.download = hash;
+	document.body.appendChild(a);
+	a.click();
+	window.URL.revokeObjectURL(url);
+	a.remove();
 }
 
 export default Menu;

@@ -545,10 +545,11 @@ pub async fn add_image_attribute(db: &PgPool, image_hash: ImageHash, key: &str, 
 
 	// Try to add the attribute
 	let changes = sqlx::query!(
-		"INSERT INTO image_attributes (image_id, key, value) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING",
+		"INSERT INTO image_attributes (image_id, key, value, blame) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING",
 		image_id,
 		key,
-		value
+		value,
+		user_id,
 	)
 	.execute(&mut *transaction)
 	.await?;
@@ -637,8 +638,9 @@ pub async fn edit_image_caption(db: &PgPool, image_hash: ImageHash, caption: &st
 
 	// Try to update the caption
 	let changes = sqlx::query!(
-		"UPDATE images_2 SET caption = $1 WHERE hash = $2 AND active = true AND caption IS DISTINCT FROM $1",
+		"UPDATE images_2 SET caption = $1, caption_blame = $2 WHERE hash = $3 AND active = true AND caption IS DISTINCT FROM $1",
 		caption,
+		user_id,
 		&image_hash.0
 	)
 	.execute(&mut *transaction)
@@ -891,7 +893,7 @@ pub async fn authenticate_login(db: &PgPool, username: &str, login_key: LoginKey
 		Some(row) => row,
 		None => return Ok(None),
 	};
-
+	
 	let db_login_key = LoginKey::from_bytes(db_login_key);
 
 	// Compare the login key hash

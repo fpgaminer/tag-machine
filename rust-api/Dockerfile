@@ -1,6 +1,8 @@
 # Build Rust API
 FROM rust:slim-bullseye as builder
 
+RUN apt-get update && apt-get install -y pkg-config libssl-dev
+
 WORKDIR /usr/src/rust-api
 COPY src ./src
 COPY Cargo.* ./
@@ -15,6 +17,8 @@ RUN cargo install --path .
 
 # Build the final image
 FROM debian:bullseye-slim
+
+RUN apt-get update && apt-get install -y ca-certificates
 
 WORKDIR /root
 

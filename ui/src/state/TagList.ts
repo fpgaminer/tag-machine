@@ -3,12 +3,18 @@ import { Tag, errorMessageState } from "../state";
 import * as api from "../api";
 import Fuse from "fuse.js";
 
+export enum TagListStateStatus {
+	Idle,
+	Fetching,
+	Success,
+}
+
 class TagListState {
 	tags: Tag[] | null = null;
 	aliases: Map<string, string> | null = null;
 	implications: Map<string, Set<string>> | null = null;
 	blacklistAndDeprecations: Set<string> | null = null;
-	fetched: boolean = false;
+	status: TagListStateStatus = TagListStateStatus.Idle;
 
 	constructor() {
 		makeAutoObservable(this);
@@ -18,10 +24,16 @@ class TagListState {
 		let data: api.ApiTag[];
 		let mappingData: api.ApiTagMappings;
 
+		this.setStatus(TagListStateStatus.Fetching);
+
 		try {
 			data = await api.listTags();
 		} catch (error) {
-			errorMessageState.setErrorMessage(`Error fetching tag list: ${error as string}`);
+			errorMessageState.setErrorMessage(`Error fetching tag list: ${error as string}, will retry in 5 seconds`);
+
+			// Retry after a delay
+			new Promise((resolve) => setTimeout(resolve, 5000));
+
 			return;
 		}
 
@@ -30,7 +42,11 @@ class TagListState {
 		try {
 			mappingData = await api.getTagMappings();
 		} catch (error) {
-			errorMessageState.setErrorMessage(`Error fetching tag mappings: ${error as string}`);
+			errorMessageState.setErrorMessage(`Error fetching tag mappings: ${error as string}, will retry in 5 seconds`);
+
+			// Retry after a delay
+			new Promise((resolve) => setTimeout(resolve, 5000));
+			
 			return;
 		}
 
@@ -47,7 +63,7 @@ class TagListState {
 			this.aliases = aliases;
 			this.implications = implications;
 			this.blacklistAndDeprecations = blacklistAndDeprecations;
-			this.fetched = true;
+			this.status = TagListStateStatus.Success;
 		});
 	}
 
@@ -118,42 +134,12 @@ class TagListState {
 			return;
 		}
 
-		// Fetch the tag
-		let tag: api.ApiTag;
-
-		try {
-			const result = await api.getTagByName(name);
-
-			if (result === null) {
-				throw Error(`Tag ${name} not found after adding. WARNING: LOCAL STATE IS OUT OF DATE NOW`);
-			}
-
-			tag = result;
-		} catch (error) {
-			errorMessageState.setErrorMessage(
-				`Error fetching tag (WARNING: LOCAL STATE IS OUT OF DATE NOW): ${error as string}`
-			);
-			return;
-		}
-
-		// Update our local state
-		if (existingTag !== null) {
-			runInAction(() => {
-				existingTag.active = tag.active;
-			});
-		} else {
-			runInAction(() => {
-				if (this.tags === null) {
-					throw Error("Tags not loaded yet");
-				}
-
-				this.tags.push(new Tag(tag.id, tag.name, tag.active));
-			});
-		}
+		// Update
+		await this.fetchTagList();
 	}
 
-	setFetched(fetched: boolean) {
-		this.fetched = fetched;
+	setStatus(status: TagListStateStatus) {
+		this.status = status;
 	}
 }
 

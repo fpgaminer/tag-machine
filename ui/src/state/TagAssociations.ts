@@ -28,7 +28,7 @@ autorun(
 	async () => {
 		const tagNameToTag = tagListState.tagNameToTagMap;
 		const tagIdToTag = tagListState.tagIdToTagMap;
-		const activeTags = currentImageState.image?.tags;
+		const activeTags = currentImageState.image?.flatTags;
 		const currentImageHash = currentImageState.image?.hash;
 
 		if (activeTags === undefined || tagIdToTag === null || tagNameToTag === null || currentImageHash === undefined) {

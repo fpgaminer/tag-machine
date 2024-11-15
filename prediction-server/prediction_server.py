@@ -37,18 +37,26 @@ parser.add_argument('--tag-assoc-model', type=str, default='tag_assoc_models/5kc
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-i0g1cgpe-599808')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9i6xt5iz-49920')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-1zjx0z2i-499968')
-parser.add_argument('--vlm-model', type=str, default='models/joy-caption-rx4ifbpo-499968')
+#parser.add_argument('--vlm-model', type=str, default='models/joy-caption-rx4ifbpo-499968')
+parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9em124t2-499968')
 
 
 IMAGE_DIR = Path('../rust-api/images')
 IMAGE_SIZE = 448
-VLM_PROMPT = "A descriptive caption for this image:\n"
+#VLM_PROMPT = "A descriptive caption for this image:\n"
 
 
 @dataclass
 class ImageJob:
 	image_hash: bytes
 	image: Image.Image
+
+
+@dataclass
+class ImageCaptioningJob:
+	image_hash: bytes
+	image: Image.Image
+	prompt: str
 
 
 @dataclass
@@ -102,7 +110,7 @@ def load_tag_assoc_model(model_path: Path):
 
 
 class ImageAdapter(nn.Module):
-	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool, n_modes: int):
+	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool):
 		super().__init__()
 		self.deep_extract = deep_extract
 
@@ -116,10 +124,14 @@ class ImageAdapter(nn.Module):
 		self.pos_emb = None if not pos_emb else nn.Parameter(torch.zeros(num_image_tokens, input_features))
 
 		# Mode token
-		self.mode_token = nn.Embedding(n_modes, output_features)
-		self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
-	
-	def forward(self, vision_outputs: torch.Tensor, mode: torch.Tensor):
+		#self.mode_token = nn.Embedding(n_modes, output_features)
+		#self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
+
+		# Other tokens (<|image_start|>, <|image_end|>, <|eot_id|>)
+		self.other_tokens = nn.Embedding(3, output_features)
+		self.other_tokens.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
+
+	def forward(self, vision_outputs: torch.Tensor):
 		if self.deep_extract:
 			x = torch.concat((
 				vision_outputs[-2],
@@ -144,11 +156,70 @@ class ImageAdapter(nn.Module):
 		x = self.linear2(x)
 
 		# Mode token
-		mode_token = self.mode_token(mode)
-		assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
-		x = torch.cat((x, mode_token), dim=1)
+		#mode_token = self.mode_token(mode)
+		#assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
+		#x = torch.cat((x, mode_token), dim=1)
+
+		# <|image_start|>, IMAGE, <|image_end|>, <|eot_id|>
+		# The <|eot_id|> token will be moved around and injected later
+		other_tokens = self.other_tokens(torch.tensor([0, 1], device=self.other_tokens.weight.device).expand(x.shape[0], -1))
+		assert other_tokens.shape == (x.shape[0], 2, x.shape[2]), f"Expected {(x.shape[0], 2, x.shape[2])}, got {other_tokens.shape}"
+		x = torch.cat((other_tokens[:, 0:1], x, other_tokens[:, 1:2]), dim=1)
 
 		return x
+
+	def get_eot_embedding(self):
+		return self.other_tokens(torch.tensor([2], device=self.other_tokens.weight.device)).squeeze(0)
+
+
+# class ImageAdapter(nn.Module):
+# 	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool, n_modes: int):
+# 		super().__init__()
+# 		self.deep_extract = deep_extract
+
+# 		if self.deep_extract:
+# 			input_features = input_features * 5
+
+# 		self.linear1 = nn.Linear(input_features, output_features)
+# 		self.activation = nn.GELU()
+# 		self.linear2 = nn.Linear(output_features, output_features)
+# 		self.ln1 = nn.Identity() if not ln1 else nn.LayerNorm(input_features)
+# 		self.pos_emb = None if not pos_emb else nn.Parameter(torch.zeros(num_image_tokens, input_features))
+
+# 		# Mode token
+# 		self.mode_token = nn.Embedding(n_modes, output_features)
+# 		self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
+	
+# 	def forward(self, vision_outputs: torch.Tensor, mode: torch.Tensor):
+# 		if self.deep_extract:
+# 			x = torch.concat((
+# 				vision_outputs[-2],
+# 				vision_outputs[3],
+# 				vision_outputs[7],
+# 				vision_outputs[13],
+# 				vision_outputs[20],
+# 			), dim=-1)
+# 			assert len(x.shape) == 3, f"Expected 3, got {len(x.shape)}"  # batch, tokens, features
+# 			assert x.shape[-1] == vision_outputs[-2].shape[-1] * 5, f"Expected {vision_outputs[-2].shape[-1] * 5}, got {x.shape[-1]}"
+# 		else:
+# 			x = vision_outputs[-2]
+
+# 		x = self.ln1(x)
+
+# 		if self.pos_emb is not None:
+# 			assert x.shape[-2:] == self.pos_emb.shape, f"Expected {self.pos_emb.shape}, got {x.shape[-2:]}"
+# 			x = x + self.pos_emb
+
+# 		x = self.linear1(x)
+# 		x = self.activation(x)
+# 		x = self.linear2(x)
+
+# 		# Mode token
+# 		mode_token = self.mode_token(mode)
+# 		assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
+# 		x = torch.cat((x, mode_token), dim=1)
+
+# 		return x
 
 
 def load_vlm_model(model_path: Path):
@@ -187,7 +258,7 @@ def load_vlm_model(model_path: Path):
 	clip_model.requires_grad_(False)
 	clip_model.to('cuda')
 
-	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False, n_modes=3*7)
+	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False)#, n_modes=3*7)
 	checkpoint = torch.load(Path(model_path) / "image_adapter.pt", map_location='cpu')
 	image_adapter.load_state_dict(checkpoint)
 	image_adapter.eval()
@@ -197,41 +268,44 @@ def load_vlm_model(model_path: Path):
 
 
 @torch.no_grad()
-def run_vlm_model(tokenizer, text_model, clip_processor, clip_model, image_adapter, image: Image.Image) -> str:
+def run_vlm_model(prompt_str: str, tokenizer, text_model, clip_processor, clip_model, image_adapter, image: Image.Image) -> str:
 	image = image.resize((384, 384), Image.LANCZOS)
-	image = TF.pil_to_tensor(image).unsqueeze(0) / 255.0
-	image = TF.normalize(image, [0.5], [0.5])
+	pixel_values = TF.pil_to_tensor(image).unsqueeze(0) / 255.0
+	pixel_values = TF.normalize(pixel_values, [0.5], [0.5])
 	#image = clip_processor(images=image.convert('RGB'), return_tensors='pt').pixel_values
-	image = image.to('cuda')
+	pixel_values = pixel_values.to('cuda')
 
-	prompt = tokenizer.encode(VLM_PROMPT, return_tensors='pt', padding=False, truncation=False, add_special_tokens=False)
+	prompt = tokenizer.encode(prompt_str, return_tensors='pt', padding=False, truncation=False, add_special_tokens=False)
 
 	# Embed image
 	with torch.amp.autocast_mode.autocast('cuda', enabled=True):
-		vision_outputs = clip_model(pixel_values=image, output_hidden_states=True)
+		vision_outputs = clip_model(pixel_values=pixel_values, output_hidden_states=True)
 		image_features = vision_outputs.hidden_states
-		#embedded_images = image_adapter(image_features)
-		embedded_images = image_adapter(image_features, torch.tensor([7,8,9,10,11,12,13], device='cuda').unsqueeze(0))
+		embedded_images = image_adapter(image_features)
+		#embedded_images = image_adapter(image_features, torch.tensor([7,8,9,10,11,12,13], device='cuda').unsqueeze(0))
 		embedded_images = embedded_images.to('cuda')
-	
+
 	# Embed prompt
 	prompt_embeds = text_model.model.embed_tokens(prompt.to('cuda'))
 	assert prompt_embeds.shape == (1, prompt.shape[1], text_model.config.hidden_size), f"Prompt shape is {prompt_embeds.shape}, expected {(1, prompt.shape[1], text_model.config.hidden_size)}"
 	embedded_bos = text_model.model.embed_tokens(torch.tensor([[tokenizer.bos_token_id]], device=text_model.device, dtype=torch.int64))
+	eot_embed = image_adapter.get_eot_embedding().unsqueeze(0).to(dtype=text_model.dtype)
 
 	# Construct prompts
 	inputs_embeds = torch.cat([
 		embedded_bos.expand(embedded_images.shape[0], -1, -1),
 		embedded_images.to(dtype=embedded_bos.dtype),
-		#prompt_embeds.expand(embedded_images.shape[0], -1, -1),
+		prompt_embeds.expand(embedded_images.shape[0], -1, -1),
+		eot_embed.expand(embedded_images.shape[0], -1, -1),
 	], dim=1)
 
-	generated_captions = []
+	#generated_captions = []
 
 	input_ids = torch.cat([
 		torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long),
 		torch.zeros((1, embedded_images.shape[1]), dtype=torch.long),
-		#prompt,
+		prompt,
+		torch.tensor([[tokenizer.convert_tokens_to_ids("<|eot_id|>")]], dtype=torch.long),
 	], dim=1).to('cuda')
 	attention_mask = torch.ones_like(input_ids)
 	print(input_ids)
@@ -243,7 +317,7 @@ def run_vlm_model(tokenizer, text_model, clip_processor, clip_model, image_adapt
 	# Trim off the prompt
 	generate_ids = generate_ids[:, input_ids.shape[1]:]
 	#print(generate_ids)
-	if generate_ids[0][-1] == tokenizer.eos_token_id:
+	if generate_ids[0][-1] == tokenizer.eos_token_id or generate_ids[0][-1] == tokenizer.convert_tokens_to_ids("<|eot_id|>"):
 		generate_ids = generate_ids[:, :-1]
 
 	caption = tokenizer.batch_decode(generate_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)[0]
@@ -321,7 +395,16 @@ def tag_assoc():
 def caption():
 	"""Generate a caption for an image using the VLM model."""
 	data = request.get_json()
+
+	# Image hash
 	image_hash = bytes.fromhex(data['hash'])
+
+	# Caption type
+	prompt = data.get('prompt', None)
+	if prompt is None or not isinstance(prompt, str):
+		return 'Prompt must be a string', 400
+	if len(prompt) > 256:
+		return 'Prompt is too long', 400
 
 	# Check if image exists
 	image_path = IMAGE_DIR / f'{image_hash.hex()[:2]}' / f'{image_hash.hex()[2:4]}' / f'{image_hash.hex()}'
@@ -333,7 +416,7 @@ def caption():
 	image = Image.open(image_path)
 
 	logging.info(f'Queueing caption prediction for {image_hash.hex()}')
-	future = executor.submit(captioning_worker, ImageJob(image_hash, image))
+	future = executor.submit(captioning_worker, ImageCaptioningJob(image_hash=image_hash, image=image, prompt=prompt))
 	result = future.result()
 	if result is None:
 		return 'Prediction failed', 500
@@ -391,13 +474,13 @@ def prepare_image(image: Image.Image) -> torch.Tensor:
 
 
 @torch.no_grad()
-def captioning_worker(job: ImageJob):
+def captioning_worker(job: ImageCaptioningJob):
 	image_hash = job.image_hash.hex()
 	image = job.image
 	logging.info(f'Generating caption for {image_hash}')
 
 	try:
-		caption = run_vlm_model(*thread_local.vlm_model, image)
+		caption = run_vlm_model(job.prompt, *thread_local.vlm_model, image)
 	except Exception as e:
 		logging.error(f'Captioning failed for {image_hash}: {e}')
 		return None
