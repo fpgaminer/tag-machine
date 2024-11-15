@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS images_2 (
     embedding_1 bytea,
     embedding_2 halfvec(1152),  -- siglip-so400m-patch14-384
     caption TEXT,
+    caption_blame BIGINT,       -- User ID of the user who last changed the caption
     tsv_caption tsvector GENERATED ALWAYS AS (to_tsvector('english', caption)) STORED
 );
 
@@ -26,6 +27,7 @@ CREATE TABLE IF NOT EXISTS image_attributes (
     key text NOT NULL,
     value text NOT NULL,
     value_md5 bytea GENERATED ALWAYS AS (decode(md5(value), 'hex')) STORED,
+    blame BIGINT NOT NULL,       -- User ID of the user who last added this attribute
     PRIMARY KEY (image_id, key, value_md5)
 );
 
@@ -70,6 +72,7 @@ CREATE TABLE IF NOT EXISTS logs (
 
 CREATE INDEX IF NOT EXISTS logs_image_hash_idx ON logs USING HASH (image_hash);
 CREATE INDEX IF NOT EXISTS logs_user_id_idx ON logs (user_id);
+CREATE INDEX IF NOT EXISTS logs_timestamp_idx ON logs ("timestamp");
 
 
 CREATE TABLE IF NOT EXISTS users (

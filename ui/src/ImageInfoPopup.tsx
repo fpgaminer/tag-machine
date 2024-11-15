@@ -2,10 +2,28 @@ import { ImageObject, imageHashToUrl, imageInfoPopupState } from "./state";
 import { observer } from "mobx-react";
 import exifr from "exifr";
 import React from "react";
+import { authState } from "./state/Auth";
+import { authenticatedFetch } from "./api";
 
-async function getExifData(url: string): Promise<string> {
+async function uploadToImgOps(imageHash: string, token: string | null) {
+	if (token === null) {
+		return;
+	}
+
+	const response = await authenticatedFetch(`/api/images/${imageHash}/imgops`, { method: "POST" });
+	if (!response.ok) {
+		alert(`Failed to fetch image: ${response.statusText} (${response.status})`);
+		return;
+	}
+
+	const redirectUrl = await response.text();
+
+	window.open(`https://imgops.com${redirectUrl}`, "_blank");
+}
+
+async function getExifData(url: string, token: string): Promise<string> {
 	try {
-		const response = await fetch(url);
+		const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
 		const blob = await response.blob();
 		const exifData = await exifr.parse(blob);
 
@@ -47,9 +65,12 @@ function ImageInfoPopup(props: ImageInfoPopupProps) {
 	const { image } = props;
 	const url = imageHashToUrl(image.hash);
 	const [exifData, setExifData] = React.useState<string | null>(null);
+	const userToken = authState.user_token;
 
 	React.useEffect(() => {
-		void getExifData(url).then(setExifData);
+		if (userToken !== null) {
+			void getExifData(url, userToken).then(setExifData);
+		}
 	}, [url]);
 
 	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
@@ -62,11 +83,14 @@ function ImageInfoPopup(props: ImageInfoPopupProps) {
 		if (name == "danbooru_post_id") {
 			return <a href={`https://danbooru.donmai.us/posts/${value}`} target="_blank" rel="noreferrer">{value}</a>;
 		}
+		else if (name == "e621_post_id") {
+			return <a href={`https://e621.net/posts/${value}`} target="_blank" rel="noreferrer">{value}</a>;
+		}
 
 		return <span>{value}</span>;
 	}
 
-	const attributes = Array.from(image.attributes.entries()).map(([name, value]) => {
+	const attributes = Array.from(image.flatAttributes.entries()).map(([name, value]) => {
 		return (
 			<div className="image-info-attribute" key={name}>
 				<div className="image-info-attribute-name">{name}</div>
@@ -94,6 +118,12 @@ function ImageInfoPopup(props: ImageInfoPopupProps) {
 								<div className="image-info-attribute">
 									<div className="image-info-attribute-name">EXIF</div>
 									<div className="image-info-attribute-value">{exif}</div>
+								</div>
+								<div className="image-info-attribute">
+									<div className="image-info-attribute-name">ImgOps</div>
+									<div className="image-info-attribute-value">
+										<button onClick={() => uploadToImgOps(image.hash, userToken)}>Upload to ImgOps</button>
+									</div>
 								</div>
 							</div>
 						</div>

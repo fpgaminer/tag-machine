@@ -16,7 +16,7 @@ export class CurrentImageState {
 	get imageId(): number | null {
 		return this._imageId;
 	}
-
+	
 	set imageId(image_id: number | null) {
 		const imageChanged = this._imageId != image_id;
 
@@ -42,7 +42,7 @@ export class CurrentImageState {
 
 			if (image_id !== null) {
 				// Make sure we have the image in our cache and update it
-				void imageListState.fetchImageById(image_id);
+				void imageListState.fetchImage(image_id);
 			}
 		}
 	}
@@ -116,7 +116,7 @@ export class CurrentImageState {
 
 		const tagMap = new Map<string, Tag>();
 
-		for (const tagId of currentImage.tags) {
+		for (const tagId of currentImage.flatTags) {
 			const tag = tagIdToTag.get(tagId);
 
 			if (tag !== null && tag !== undefined) {
@@ -186,7 +186,7 @@ export class CurrentImageState {
 			}
 
 			// Get the image's metadata
-			await imageListState.fetchImageById(image_id);
+			await imageListState.fetchImage(image_id);
 
 			const image = imageListState.getImageById(image_id);
 

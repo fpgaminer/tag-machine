@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 from typing import Generator
-from PIL import Image
-from io import BytesIO
 import requests
 from pydantic import BaseModel
 import logging
-import struct
-from collections import defaultdict
 
 
 API_URL = 'http://localhost:1420'
@@ -17,55 +13,32 @@ class DBImage(BaseModel):
 	hash: str
 	active: bool
 	tags: set[str]
-	attributes: dict[str, list[str]]
+	attributes: dict[str, set[str]]
 	tags_blame: dict[str, int] | None   # tag -> user_id
 	caption: str | None
 
-	def tag(self, name: str, user_id: int):
-		data = {
-			'hash': self.hash,
-			'tag': name,
-			'user': user_id,
-		}
-		r = requests.post(f'{API_URL}/api/tag_image', json=data)
-		r.raise_for_status()
-		self.tags.add(name)
+	def add_tag(self, api: 'TagMachineAPI', tag: str):
+		api.tag_image(bytes.fromhex(self.hash), tag)
+		self.tags.add(tag)
 	
-	def untag(self, name: str, user_id: int):
-		data = {
-			'hash': self.hash,
-			'tag': name,
-			'user': user_id,
-		}
-		r = requests.post(f'{API_URL}/api/untag_image', json=data)
-		r.raise_for_status()
-		self.tags.remove(name)
+	def remove_tag(self, api: 'TagMachineAPI', tag: str):
+		api.untag_image(bytes.fromhex(self.hash), tag)
+		self.tags.remove(tag)
 	
-	def read_image(self):
-		r = requests.get(f'{API_URL}/images/{self.hash}')
-		r.raise_for_status()
-		return Image.open(BytesIO(r.content))
+	def add_attribute(self, api: 'TagMachineAPI', key: str, value: str, singular: bool):
+		api.add_image_attribute(bytes.fromhex(self.hash), key, value, singular)
+		if key not in self.attributes:
+			self.attributes[key] = set()
+		
+		if singular:
+			self.attributes[key] = {value}
+		else:
+			self.attributes[key].add(value)
 	
-	def edit_attribute(self, name: str, value: str, user_id: int):
-		data = {
-			'hash': self.hash,
-			'key': name,
-			'value': value,
-			'user': user_id,
-		}
-		r = requests.post(f'{API_URL}/api/edit_image_attribute', json=data)
-		r.raise_for_status()
-		self.attributes[name] = value
-	
-	def remove_attribute(self, name: str, user_id: int):
-		data = {
-			'hash': self.hash,
-			'key': name,
-			'user': user_id,
-		}
-		r = requests.post(f'{API_URL}/api/remove_image_attribute', json=data)
-		r.raise_for_status()
-		del self.attributes[name]
+	def remove_attribute(self, api: 'TagMachineAPI', key: str, value: str):
+		api.remove_image_attribute(bytes.fromhex(self.hash), key, value)
+		if key in self.attributes:
+			self.attributes[key].remove(value)
 
 
 class DBTag(BaseModel):
@@ -83,6 +56,160 @@ class DBLog(BaseModel):
 	tag: str | None
 	attribute_key: str | None
 	attribute_value: str | None
+
+
+class TagMachineAPI:
+	def __init__(self, username: str, login_key: bytes | str, url: str = API_URL):
+		if isinstance(login_key, bytes):
+			login_key = login_key.hex()
+
+		self.session = requests.Session()
+		self.url = url
+
+		# Login
+		response = requests.post(self.url + '/api/login', json={'username': username, 'login_key': login_key})
+		response.raise_for_status()
+		user_token = response.json()
+		assert isinstance(user_token, str)
+		self.user_token = user_token
+
+		# Set default headers
+		self.session.headers['Authorization'] = f'Bearer {self.user_token}'
+	
+	def get_image_by_hash(self, image_hash: bytes) -> DBImage:
+		"""
+		Get an image's metadata by its hash.
+		"""
+		r = self.session.get(f'{self.url}/api/image_by_hash/{image_hash.hex()}')
+		r.raise_for_status()
+		metadata = r.json()
+		return DBImage(tags_blame=None, **metadata)
+	
+	def get_image_by_id(self, image_id: int) -> DBImage:
+		"""
+		Get an image's metadata by its id.
+		"""
+		r = self.session.get(f'{self.url}/api/image_by_id/{image_id}')
+		r.raise_for_status()
+		metadata = r.json()
+		return DBImage(tags_blame=None, **metadata)
+	
+	def read_image_by_hash(self, image_hash: bytes) -> bytes:
+		"""
+		Read an image by its hash.
+		"""
+		r = self.session.get(f'{self.url}/api/images/{image_hash.hex()}')
+		r.raise_for_status()
+		return r.content
+
+	def read_image_by_id(self, image_id: int) -> bytes:
+		"""
+		Read an image by its id.
+		"""
+		r = self.session.get(f'{self.url}/api/images_by_id/{image_id}')
+		r.raise_for_status()
+		return r.content
+
+	
+	def tag_image(self, image_hash: bytes, tag: str):
+		"""
+		Add a tag to an image.
+		"""
+		data = {
+			'hash': image_hash.hex(),
+			'tag': tag,
+		}
+		r = self.session.post(f'{self.url}/api/tag_image', json=data)
+		r.raise_for_status()
+	
+	def untag_image(self, image_hash: bytes, tag: str):
+		"""
+		Remove a tag from an image.
+		"""
+		data = {
+			'hash': image_hash.hex(),
+			'tag': tag,
+		}
+		r = self.session.post(f'{self.url}/api/untag_image', json=data)
+		r.raise_for_status()
+	
+	def add_image_attribute(self, image_hash: bytes, key: str, value: str, singular: bool) -> bool:
+		"""
+		Add an attribute to an image. Returns False if the attribute already exists.
+		"""
+		data = {
+			'hash': image_hash.hex(),
+			'key': key,
+			'value': value,
+			'singular': singular,
+		}
+		r = self.session.post(f'{self.url}/api/add_image_attribute', json=data)
+		if r.status_code == 409:
+			return False
+		r.raise_for_status()
+		return True
+
+	def remove_image_attribute(self, image_hash: bytes, key: str, value: str):
+		"""
+		Remove an attribute from an image.
+		"""
+		data = {
+			'hash': image_hash.hex(),
+			'key': key,
+			'value': value,
+		}
+		r = self.session.post(f'{self.url}/api/remove_image_attribute', json=data)
+		r.raise_for_status()
+	
+	def fetch_logs(self, image_hash: bytes | None = None, action: str | None = None) -> list[DBLog]:
+		params = {
+			'min_id': 0,
+			'limit': 1000000,
+			'image_hash': image_hash.hex() if image_hash is not None else None,
+			'action': action,
+		}
+
+		logs = []
+
+		while True:
+			response = self.session.get(f'{self.url}/api/logs', params=params)
+			response.raise_for_status()
+			response_json = response.json()
+			new_logs = [DBLog(**log) for log in response_json]
+			if len(new_logs) == 0:
+				break
+
+			logs.extend(new_logs)
+			params['min_id'] = new_logs[-1].id + 1
+	
+		return logs
+	
+	def search(self, operator: dict, order_by: str, select: list[str], limit: int | None) -> list | dict:
+		"""
+		Search images in the database.
+		"""
+		params = {
+			'order_by': order_by,
+			'operator': operator,
+			'limit': limit,
+			'select': select,
+		}
+		r = self.session.post(f'{self.url}/api/search_images', json=params)
+		r.raise_for_status()
+		return r.json()
+	
+	def add_image(self, image_hash: bytes) -> bool:
+		"""
+		Add an image to the database. Returns False if the image already exists.
+		"""
+		data = {
+			'hash': image_hash.hex(),
+		}
+		r = self.session.post(f'{self.url}/api/add_image', json=data)
+		if r.status_code == 409:
+			return False
+		r.raise_for_status()
+		return True
 
 
 class DatabaseData:
@@ -212,42 +339,3 @@ class DatabaseData:
 		logging.info('Sorting images...')
 		self.images_sorted_by_hash = sorted(self.images.values(), key=lambda image: image.hash)
 		self.images_sorted_by_id = sorted(self.images.values(), key=lambda image: image.id)
-	
-	def fetch_logs(self, image_hash: str | None = None, action: str | None = None) -> list[DBLog]:
-		params = {
-			'min_id': 0,
-			'limit': 1000000,
-			'image_hash': image_hash,
-			'action': action,
-		}
-
-		logs = []
-
-		while True:
-			response = requests.get(API_URL + '/api/logs', params=params, headers={'Authorization': f'Bearer {self.user_token}'})
-			response.raise_for_status()
-			response_json = response.json()
-			new_logs = [DBLog(**log) for log in response_json]
-			if len(new_logs) == 0:
-				break
-
-			logs.extend(new_logs)
-			params['min_id'] = new_logs[-1].id + 1
-	
-		return logs
-
-
-def read_image_by_id(image_id: int, session: requests.Session | None = None) -> Image.Image:
-	session = session if session is not None else requests.Session()
-
-	r = session.get(f'{API_URL}/images_by_id/{image_id}')
-	r.raise_for_status()
-	return Image.open(BytesIO(r.content))
-
-
-def read_image_by_hash(image_hash: str, session: requests.Session | None = None) -> Image.Image:
-	session = session if session is not None else requests.Session()
-
-	r = session.get(f'{API_URL}/images/{image_hash}')
-	r.raise_for_status()
-	return Image.open(BytesIO(r.content))

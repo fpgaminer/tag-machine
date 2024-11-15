@@ -12,8 +12,8 @@ export interface ApiTag {
 export interface ApiImage {
 	id: number;
 	hash: string;
-	tags: number[];
-	attributes: { [key: string]: string[] };
+	tags: { [key: number]: number };
+	attributes: { [key: string]: { [key: string]: number } };
 	active: boolean;
 	caption: string;
 }
@@ -52,74 +52,12 @@ export interface ApiTagMappings {
 
 export interface ApiUserInfo {
 	id: number;
-	is_admin: boolean;
+	username: string;
+	scopes: string;
 }
 
-export type SearchOperator =
-	| { kind: "not"; value: SearchOperator }
-	| { kind: "and"; value: [SearchOperator, SearchOperator] }
-	| { kind: "or"; value: [SearchOperator, SearchOperator] }
-	| { kind: "tag"; value: number }
-	| { kind: "attribute"; value: [string, string] }
-	| { kind: "min_id"; value: number }
-	| { kind: "max_id"; value: number };
-
-export type SearchOrderBy = "id" | "hash";
-
-export function searchOperatorToString(operator: SearchOperator): string {
-	switch (operator.kind) {
-		case "not":
-			return `not ${searchOperatorToString(operator.value)}`;
-		case "and":
-			return `(${searchOperatorToString(operator.value[0])} and ${searchOperatorToString(operator.value[1])})`;
-		case "or":
-			return `(${searchOperatorToString(operator.value[0])} or ${searchOperatorToString(operator.value[1])})`;
-		case "tag":
-			return `tag:${operator.value}`;
-		case "attribute":
-			return `${operator.value[0]}=${operator.value[1]}`;
-		case "min_id":
-			return `min_id:${operator.value}`;
-		case "max_id":
-			return `max_id:${operator.value}`;
-	}
-}
-
-export function searchOperatorToJson(operator: SearchOperator | null): object | null {
-	if (operator === null) {
-		return null;
-	}
-
-	switch (operator.kind) {
-		case "tag":
-			return {
-				tag: operator.value,
-			};
-		case "attribute":
-			return {
-				attribute: [operator.value[0], operator.value[1]],
-			};
-		case "not":
-			return {
-				not: searchOperatorToJson(operator.value),
-			};
-		case "and":
-			return {
-				and: [searchOperatorToJson(operator.value[0]), searchOperatorToJson(operator.value[1])],
-			};
-		case "or":
-			return {
-				or: [searchOperatorToJson(operator.value[0]), searchOperatorToJson(operator.value[1])],
-			};
-		case "min_id":
-			return {
-				minid: operator.value,
-			};
-		case "max_id":
-			return {
-				maxid: operator.value,
-			};
-	}
+export interface ApiLoginResponse {
+	token: string;
 }
 
 export type SearchSelect = "id" | "hash" | "tags" | "attributes" | "active" | "caption" | "count" | "min_id" | "max_id";
@@ -156,236 +94,138 @@ export async function listTags(): Promise<ApiTag[]> {
 	return (await response.json()) as ApiTag[];
 }
 
-export async function getTagByName(name: string): Promise<ApiTag | null> {
-	const response = await authenticatedFetch(`${API_URL}/tag_by_name/${name}`);
-	if (!response.ok) {
-		throw new Error(`Failed to get tag by name: ${response.status}`);
-	}
-
-	return (await response.json()) as ApiTag;
-}
-
 export async function addTag(name: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/add_tag`, {
+	const response = await authenticatedFetch(`${API_URL}/tags/${name}`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			name,
-		}),
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to add tag: ${response.status}`);
+		throw new Error(`Failed to add tag: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
 export async function removeTag(name: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/remove_tag`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			name,
-		}),
+	const response = await authenticatedFetch(`${API_URL}/tags/${name}`, {
+		method: "DELETE",
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to remove tag: ${response.status}`);
+		throw new Error(`Failed to remove tag: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function searchImages(
+/*export async function searchImages(
 	select: SearchSelect[],
 	orderBy: SearchOrderBy | null,
 	limit: number | null,
 	operator: SearchOperator | null
+): Promise<ApiSearchResults> {*/
+export async function searchImages(
+	select: SearchSelect[],
+	limit: number | null,
+	query: string,
 ): Promise<ApiSearchResults> {
-	const operatorJson = searchOperatorToJson(operator);
-
-	const response = await authenticatedFetch(`${API_URL}/search_images`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			order_by: orderBy,
-			limit,
-			operator: operatorJson,
-			select: select,
-		}),
+	const params = new URLSearchParams({
+		query: query,
+	}).toString();
+	const response = await authenticatedFetch(`${API_URL}/search/images?${params}`, {
+		method: "GET",
 	});
 
 	if (!response.ok) {
 		throw new Error(`Failed to search images: ${response.status}`);
 	}
 
-	return (await response.json()) as ApiSearchResults;
+	return {
+		id: await response.json(),
+	};
 }
 
-export async function getImageByHash(hash: string): Promise<ApiImage | null> {
-	const response = await authenticatedFetch(`${API_URL}/image_by_hash/${hash}`);
+export async function getImageMetadata(identifier: number | string): Promise<ApiImage | null> {
+	const response = await authenticatedFetch(`${API_URL}/images/${identifier}/metadata`);
 
 	if (response.status === 404) {
 		return null;
 	}
 
 	if (!response.ok) {
-		throw new Error(`Failed to get image by hash: ${response.status}`);
-	}
-
-	return (await response.json()) as ApiImage;
-}
-
-export async function getImageById(id: number): Promise<ApiImage | null> {
-	const response = await authenticatedFetch(`${API_URL}/image_by_id/${id}`);
-
-	if (response.status === 404) {
-		return null;
-	}
-
-	if (!response.ok) {
-		throw new Error(`Failed to get image by id: ${response.status}`);
+		throw new Error(`Failed to get image by hash: ${response.status}: ${await response.text()}`);
 	}
 
 	return (await response.json()) as ApiImage;
 }
 
 export async function addImage(hash: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/add_image`, {
+	const response = await authenticatedFetch(`${API_URL}/images/${hash}`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-		}),
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to add image: ${response.status}`);
+		throw new Error(`Failed to add image: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function removeImage(hash: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/remove_image`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-		}),
+export async function removeImage(identifier: number | string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${identifier}`, {
+		method: "DELETE",
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to remove image: ${response.status}`);
+		throw new Error(`Failed to remove image: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function addImageAttribute(hash: string, key: string, value: string, singular: boolean): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/add_image_attribute`, {
+export async function addImageAttribute(image: number | string, key: string, value: string, singular: boolean): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}/${singular}`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-			key,
-			value,
-			singular,
-		}),
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to add image attribute: ${response.status}`);
+		throw new Error(`Failed to add image attribute: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function removeImageAttribute(hash: string, key: string, value: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/remove_image_attribute`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-			key,
-			value,
-		}),
+export async function removeImageAttribute(image: number | string, key: string, value: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
+		method: "DELETE",
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to remove image attribute: ${response.status}`);
+		throw new Error(`Failed to remove image attribute: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function captionImage(hash: string, caption: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/caption_image`, {
+export async function tagImage(image: number | string, tag: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${image}/tags/${tag}`, {
 		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-			caption,
-		}),
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to caption image: ${response.status}`);
+		throw new Error(`Failed to tag image: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
-export async function tagImage(hash: string, tag: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/tag_image`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-			tag,
-		}),
+export async function untagImage(image: number | string, tag: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/images/${image}/tags/${tag}`, {
+		method: "DELETE",
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to tag image: ${response.status}`);
-	}
-
-	return;
-}
-
-export async function untagImage(hash: string, tag: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/untag_image`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash,
-			tag,
-		}),
-	});
-
-	if (!response.ok) {
-		throw new Error(`Failed to untag image: ${response.status}`);
+		throw new Error(`Failed to untag image: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
@@ -449,7 +289,7 @@ export async function getTagImageAssociations(tags: string[], hash: string): Pro
 	return new Map(Object.entries(jsonObject));
 }
 
-export async function getImageCaptionSuggestion(hash: string): Promise<string> {
+export async function getImageCaptionSuggestion(hash: string, prompt: string): Promise<string> {
 	const response = await authenticatedFetch(`${PREDICTION_API_URL}/caption`, {
 		method: "POST",
 		headers: {
@@ -457,6 +297,7 @@ export async function getImageCaptionSuggestion(hash: string): Promise<string> {
 		},
 		body: JSON.stringify({
 			hash: hash,
+			prompt: prompt,
 		}),
 	});
 
@@ -488,7 +329,7 @@ export async function uploadImage(file: File): Promise<void> {
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to upload image: ${response.status}`);
+		throw new Error(`Failed to upload image: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
@@ -510,18 +351,19 @@ export async function login(username: string, login_key: string): Promise<string
 		throw new Error(`Failed to login: ${response.status}`);
 	}
 
-	return (await response.json()) as string;
+	const json = (await response.json()) as ApiLoginResponse;
+	return json.token;
 }
 
 export async function user_info(): Promise<ApiUserInfo | null> {
-	const response = await authenticatedFetch(`${API_URL}/user_info`);
+	const response = await authenticatedFetch(`${API_URL}/users/me`);
 
 	if (response.status === 401) {
 		return null;
 	}
 
 	if (!response.ok) {
-		throw new Error(`Failed to get user info: ${response.status}`);
+		throw new Error(`Failed to get user info: ${response.status}: ${await response.text()}`);
 	}
 
 	return (await response.json()) as ApiUserInfo;

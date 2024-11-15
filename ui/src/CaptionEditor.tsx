@@ -2,7 +2,7 @@ import { observer } from "mobx-react";
 import { currentImageState } from "./state/CurrentImage";
 import React, { useEffect, useState } from "react";
 import { autorun } from "mobx";
-import { captionImage, setImageTrainingPrompt, suggestCaption } from "./state";
+import { addImageAttribute, suggestCaption } from "./state";
 import llama3Tokenizer, { Llama3Tokenizer } from "./llama3Tokenizer";
 import { AutoTokenizer } from '@xenova/transformers';
 
@@ -13,17 +13,42 @@ enum CaptionMode {
 	TrainingPrompt = "TrainingPrompt",
 }
 
+type CaptionType = "descriptive" | "training_prompt" | "rng-tags";
+type CaptionTone = "formal" | "informal";
+type CaptionLength = "very short" | "short" | "medium-length" | "long" | "very long" | number | null;
+
 enum SaveButtonState {
 	Idle = 0,
 	Saving = 1,
 	Saved = 2,
 }
 
+const CAPTION_TYPE_MAP: { 
+	[key: string]: string[] 
+} = {
+	"descriptive,formal,false,false": ["Write a descriptive caption for this image in a formal tone."],
+	"descriptive,formal,false,true": ["Write a descriptive caption for this image in a formal tone within {word_count} words."],
+	"descriptive,formal,true,false": ["Write a {length} descriptive caption for this image in a formal tone."],
+	"descriptive,informal,false,false": ["Write a descriptive caption for this image in a casual tone."],
+	"descriptive,informal,false,true": ["Write a descriptive caption for this image in a casual tone within {word_count} words."],
+	"descriptive,informal,true,false": ["Write a {length} descriptive caption for this image in a casual tone."],
+
+	"training_prompt,formal,false,false": ["Write a stable diffusion prompt for this image."],
+	"training_prompt,formal,false,true": ["Write a stable diffusion prompt for this image within {word_count} words."],
+	"training_prompt,formal,true,false": ["Write a {length} stable diffusion prompt for this image."],
+
+	"rng-tags,formal,false,false": ["Write a list of Booru tags for this image."],
+	"rng-tags,formal,false,true": ["Write a list of Booru tags for this image within {word_count} words."],
+	"rng-tags,formal,true,false": ["Write a {length} list of Booru tags for this image."]
+};
+
 function CaptionEditor() {
 	// The current image and its captions (according to the server)
 	const image = currentImageState.image;
 	const imageCaption = image ? image.caption : null;
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
+	const [captionTone, setCaptionTone] = useState<CaptionTone>("formal");
+	const [captionLength, setCaptionLength] = useState<CaptionLength>(null);
 
 	// Save button state
 	const [saving, setSaving] = useState(SaveButtonState.Idle);
@@ -77,10 +102,10 @@ function CaptionEditor() {
 
 		// Save the caption to the server
 		if (captionMode === CaptionMode.StandardCaption) {
-			await captionImage(image, localCaption);
+			await addImageAttribute(image, "caption", localCaption, true);
 		}
 		else if (captionMode === CaptionMode.TrainingPrompt) {
-			await setImageTrainingPrompt(image, localCaption);
+			await addImageAttribute(image, "training_prompt", localCaption, true);
 		}
 
 		// Set state to saved and clear after a delay
@@ -108,7 +133,12 @@ function CaptionEditor() {
 			return;
 		}
 
-		const suggestion = await suggestCaption(image);
+		const caption_type = captionMode === CaptionMode.StandardCaption ? "descriptive" : "training_prompt";
+
+		const prompt = formatCaptionPrompt(caption_type, captionTone, captionLength);
+		console.log(`Using prompt: ${prompt}`);
+
+		const suggestion = await suggestCaption(image, prompt);
 
 		if (suggestion !== null) {
 			setLocalCaption(suggestion);
@@ -132,6 +162,26 @@ function CaptionEditor() {
 		const new_mode = CaptionMode[event.target.value as keyof typeof CaptionMode];
 		setCaptionMode(new_mode);
 		localStorage.setItem("captionMode", new_mode);
+
+		if (new_mode !== CaptionMode.StandardCaption) {
+			// Force the caption tone to formal for training prompts
+			setCaptionTone("formal");
+		}
+	}
+
+	function onCaptionToneChange(event: React.ChangeEvent<HTMLSelectElement>) {
+		setCaptionTone(event.target.value as CaptionTone);
+	}
+
+	function onCaptionLengthChange(event: React.ChangeEvent<HTMLSelectElement>) {
+		const value = event.target.value;
+		if (value === '') {
+			setCaptionLength(null);
+		} else if (!isNaN(Number(value))) {
+			setCaptionLength(Number(value));
+		} else {
+			setCaptionLength(value as CaptionLength);
+		}
 	}
 
 	let saveButtonText;
@@ -153,11 +203,31 @@ function CaptionEditor() {
 		<div className="column remainingSpace">
 			<div className="contentBased columnHeader">
 				<h3>Caption</h3>
-				<div className="columnHeaderButtons">
+				<div className="columnHeaderButtons captionEditorButtons">
 					<select value={captionMode} onChange={onCaptionModeChange}>
 						<option value={CaptionMode.StandardCaption}>Standard Caption</option>
 						<option value={CaptionMode.TrainingPrompt}>Training Prompt</option>
 					</select>
+
+					{/* Caption Tone Dropdown */}
+					<select value={captionTone} onChange={onCaptionToneChange} disabled={captionMode !== CaptionMode.StandardCaption}>
+						<option value="formal">Formal</option>
+						{captionMode === CaptionMode.StandardCaption && <option value="informal">Informal</option>}
+					</select>
+
+					{/* Caption Length Dropdown */}
+					<select value={captionLength ?? ''} onChange={onCaptionLengthChange}>
+						<option value=''>Any length</option>
+						<option value="very short">Very short</option>
+						<option value="short">Short</option>
+						<option value="medium-length">Medium-length</option>
+						<option value="long">Long</option>
+						<option value="very long">Very long</option>
+						{Array.from({ length: 25 }, (_, i) => 20 + i * 10).map((num) => (
+							<option key={num} value={num}>{num} words</option>
+						))}
+					</select>
+
 					<button onClick={onSuggestClicked}>Suggest</button>
 					<button onClick={onRevertClicked}>Revert</button>
 					<button onClick={onSaveClicked}>{saveButtonText}</button>
@@ -194,6 +264,29 @@ function saveLocalStorageCaption(imageId: number, captionMode: CaptionMode, capt
 function getLocalStorageCaption(imageId: number, captionMode: CaptionMode): string | null {
 	const k = `userCaptionEdits-${imageId}-${captionMode}`;
 	return localStorage.getItem(k);
+}
+
+function formatString(template: string, values: { [key: string]: string }): string {
+	return template.replace(/\{(\w+)\}/g, (match, key) => {
+		return key in values ? values[key] : match;
+	});
+}
+
+function formatCaptionPrompt(captionType: string, captionTone: string, captionLength: string | number | null): string {
+	const promptKey = `${captionType},${captionTone},${typeof captionLength === 'string' ? "true" : "false"},${typeof captionLength === 'number' ? "true" : "false"}`;
+
+	if (!(promptKey in CAPTION_TYPE_MAP)) {
+		throw new Error(`Invalid caption prompt key: ${promptKey}`);
+	}
+
+	const template = CAPTION_TYPE_MAP[promptKey][0];
+	const values = {
+		word_count: captionLength?.toString() ?? "",
+		length: captionLength?.toString() ?? "",
+	};
+	const formatted = formatString(template, values);
+
+	return formatted;
 }
 
 export default observer(CaptionEditor);

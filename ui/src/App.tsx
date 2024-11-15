@@ -8,6 +8,7 @@ import UploadPopup from "./UploadPopup";
 import TaggingMode from "./TaggingMode";
 import CaptionMode from "./CaptionMode";
 import LoginWindow from "./LoginWindow";
+import VQAMode from "./VQAMode";
 
 function App() {
 	const wikiPopupVisible = wikiPopupState.visible;
@@ -33,6 +34,7 @@ function App() {
 					{windowStateState === WindowStates.Login ? <LoginWindow /> : null}
 					{windowStateState === WindowStates.Tagging ? <TaggingMode /> : null}
 					{windowStateState === WindowStates.Captioning ? <CaptionMode /> : null}
+					{windowStateState === WindowStates.Vqa ? <VQAMode /> : null}
 				</div>
 			</div>
 		</div>

@@ -30,8 +30,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::json;
 use sha2::{Digest, Sha256};
 use sqlx::{
-	postgres::{PgConnectOptions, PgPoolOptions},
-	PgPool,
+	any, postgres::{PgConnectOptions, PgPoolOptions}, PgPool
 };
 use tags::TagMappings;
 use tokio::io::AsyncReadExt;
@@ -147,6 +146,7 @@ pub fn build_app(
 		.service(login)
 		.service(change_login_key)
 		.service(user_info)
+		.service(imgops_upload)
 }
 
 
@@ -312,7 +312,7 @@ async fn image_by_hash(db_pool: Data<PgPool>, path: web::Path<(ImageHash,)>, _us
 }
 
 
-/// Get image by hash.
+/// Get image by id.
 #[actix_web::get("/image_by_id/{id}")]
 async fn image_by_id(db_pool: Data<PgPool>, path: web::Path<(i64,)>, _user: AuthenticatedUser) -> Result<HttpResponse, ServerError> {
 	let image_id = path.into_inner().0;
@@ -751,4 +751,35 @@ async fn user_info(user: AuthenticatedUser) -> Result<HttpResponse, ServerError>
 		"id": user.id,
 		"is_admin": user.is_admin,
 	})))
+}
+
+
+#[actix_web::post("/imgops/{hash}")]
+async fn imgops_upload(_user: AuthenticatedUser, path: web::Path<(ImageHash,)>) -> Result<HttpResponse, ServerError> {
+	let hash = path.into_inner().0;
+	let hash_str = hash.to_string();
+	let image_path = Path::new(IMAGE_DIR).join(&hash_str[0..2]).join(&hash_str[2..4]).join(&hash_str);
+
+	if !image_path.exists() {
+		return Ok(HttpResponse::NotFound().finish());
+	}
+
+	// Read file
+	let file_bytes = tokio::fs::read(&image_path).await?;
+
+	// Guess the image type
+	let format = image::guess_format(&file_bytes).ok().map(|f| f.to_mime_type());
+	let mime: mime::Mime = format.unwrap_or_else(|| "application/octet-stream").parse().unwrap();
+
+	let file_part = reqwest::multipart::Part::bytes(file_bytes).file_name("file").mime_str(mime.to_string().as_str()).unwrap();
+	let client = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build()?;
+
+	let form = reqwest::multipart::Form::new().part("photo", file_part);
+
+	// Upload the image to imgops
+	let response = client.post("https://imgops.com/store").multipart(form).send().await?;
+	let headers = response.headers();
+	let redirect_url = headers.get("Location").ok_or_else(|| anyhow::anyhow!("No Location header in imgops' response"))?.to_str()?;
+
+	Ok(HttpResponse::Ok().body(redirect_url.to_string()))
 }

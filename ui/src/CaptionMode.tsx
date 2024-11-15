@@ -16,7 +16,7 @@ function TaggingMode() {
 				</div>
 			</div>
 			<div className="column sideColumnLarge spacing-5">
-				<ActiveTagList />
+				<ActiveTagList readonly={true} />
 				<CaptionEditor />
 			</div>
 		</div>

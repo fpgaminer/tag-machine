@@ -1,7 +1,7 @@
 import { autorun, makeAutoObservable, reaction, runInAction } from "mobx";
 import * as api from "./api";
 import { imageListState } from "./state/ImageList";
-import { tagListState } from "./state/TagList";
+import { tagListState, TagListStateStatus } from "./state/TagList";
 import { currentImageState } from "./state/CurrentImage";
 import { scryptAsync } from "@noble/hashes/scrypt";
 import { authState, checkIfLoggedIn } from "./state/Auth";
@@ -11,34 +11,34 @@ export const IMAGE_LIST_FETCH_SIZE = 256;
 export class ImageObject {
 	readonly id: number;
 	readonly hash: string;
-	tags: Set<number>;
-	attributes: Map<string, string[]>;
+	tags: Map<number, number>;
+	attributes: Map<string, Map<string, number>>;
 	active: boolean;
 	caption: string | null;
 
 	constructor(
 		id: number,
 		hash: string,
-		tags: number[],
-		attributes: Map<string, string[]>,
+		tags: Map<number, number>,
+		attributes: Map<string, Map<string, number>>,
 		active: boolean,
 		caption: string | null
 	) {
 		this.id = id;
 		this.hash = hash;
-		this.tags = new Set(tags);
+		this.tags = tags;
 		this.attributes = attributes;
 		this.active = active;
 		this.caption = caption;
 		makeAutoObservable(this);
 	}
 
-	addTag(tag: Tag) {
+	addTag(tag: Tag, user_id: number) {
 		if (this.tags === null) {
 			throw Error("Tags not loaded yet");
 		}
 
-		this.tags.add(tag.id);
+		this.tags.set(tag.id, user_id);
 	}
 
 	removeTag(tag: Tag) {
@@ -62,12 +62,12 @@ export class ImageObject {
 
 		// hash never changes
 		this.tags.clear();
-		for (const tag of other.tags) {
-			this.tags.add(tag);
+		for (const [k, v] of Object.entries(other.tags)) {
+			this.tags.set(parseInt(k), v);
 		}
 		this.attributes.clear();
 		for (const [key, value] of Object.entries(other.attributes)) {
-			this.attributes.set(key, value);
+			this.attributes.set(key, new Map(Object.entries(value)));
 		}
 		this.active = other.active;
 		this.caption = other.caption;
@@ -75,9 +75,23 @@ export class ImageObject {
 
 	get trainingPrompt(): string | null {
 		const trainingPrompts = this.attributes.get("training_prompt") ?? null;
-		const trainingPrompt = trainingPrompts ? trainingPrompts[0] : null;
+		const trainingPrompt = trainingPrompts !== null ? (Array.from(trainingPrompts.keys())[0] ?? null) : null;
 
 		return trainingPrompt;
+	}
+
+	get flatAttributes(): Map<string, string[]> {
+		const flatAttributes = new Map<string, string[]>();
+
+		for (const [key, values] of this.attributes.entries()) {
+			flatAttributes.set(key, Array.from(values.keys()));
+		}
+
+		return flatAttributes;
+	}
+
+	get flatTags(): number[] {
+		return Array.from(this.tags.keys());
 	}
 }
 
@@ -131,6 +145,7 @@ export enum WindowStates {
 	Login = "login",
 	Tagging = "tagging",
 	Captioning = "captioning",
+	Vqa = "vqa",
 }
 
 class WindowState {
@@ -154,6 +169,9 @@ class WindowState {
 		if (lastWindowState !== null) {
 			const newState = Object.values(WindowStates).includes(lastWindowState as WindowStates) ? lastWindowState as WindowStates : WindowStates.Tagging;
 			this.state = newState;
+		}
+		else {
+			this.state = WindowStates.Tagging;
 		}
 	}
 }
@@ -267,45 +285,45 @@ export const imageHashToUrl = (hash: string) => {
 	return `${api.API_URL}/images/${hash}`;
 };
 
-export async function captionImage(image: ImageObject, caption: string) {
-	if (image.caption === caption) {
+export async function addImageAttribute(image: ImageObject, key: string, value: string, singular: boolean) {
+	const existing = image.flatAttributes.get(key) ?? null;
+	const userId = authState.userInfo?.id;
+
+	if (userId === null || userId === undefined) {
+		throw Error("Not logged in");
+	}
+
+	if (existing !== null && singular && existing.length == 1 && existing[0] === value) {
+		// No change
+		return;
+	}
+
+	if (existing !== null && !singular && existing.includes(value)) {
 		// No change
 		return;
 	}
 
 	try {
-		await api.captionImage(image.hash, caption);
+		await api.addImageAttribute(image.hash, key, value, singular);
 	} catch (error) {
-		errorMessageState.setErrorMessage(`Error setting caption: ${error as string}`);
+		errorMessageState.setErrorMessage(`Error setting attribute: ${error as string}`);
 		return;
 	}
 
 	runInAction(() => {
-		image.caption = caption;
+		if (singular) {
+			image.attributes.set(key, new Map([[value, userId]]));
+		} else {
+			const old = image.attributes.get(key) ?? new Map<string, number>();
+			old.set(value, userId);
+			image.attributes.set(key, old);
+		}
 	});
 }
 
-export async function setImageTrainingPrompt(image: ImageObject, trainingPrompt: string) {
-	if (image.trainingPrompt === trainingPrompt) {
-		// No change
-		return;
-	}
-
+export async function suggestCaption(image: ImageObject, prompt: string): Promise<string | null> {
 	try {
-		await api.addImageAttribute(image.hash, "training_prompt", trainingPrompt, true);
-	} catch (error) {
-		errorMessageState.setErrorMessage(`Error setting training prompt: ${error as string}`);
-		return;
-	}
-
-	runInAction(() => {
-		image.attributes.set("training_prompt", [trainingPrompt]);
-	});
-}
-
-export async function suggestCaption(image: ImageObject): Promise<string | null> {
-	try {
-		return await api.getImageCaptionSuggestion(image.hash);
+		return await api.getImageCaptionSuggestion(image.hash, prompt);
 	} catch (error) {
 		errorMessageState.setErrorMessage(`Error suggesting caption: ${error as string}`);
 		return null;
@@ -318,6 +336,11 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 	const addTag = !imageTags.has(tag.id);
 	const tagIdToTag = tagListState.tagIdToTagMap;
 	const tagsToAddOrRemove: Tag[] = [tag];
+	const user_id = authState.userInfo?.id;
+
+	if (user_id === null || user_id === undefined) {
+		throw Error("Not logged in");
+	}
 
 	if (tagImplications === null || tagIdToTag === null) {
 		throw Error("Tag list not loaded yet");
@@ -331,7 +354,7 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 		.map((impliedTag) => tagListState.getTagByName(impliedTag))
 		.filter((impliedTag) => impliedTag !== null) as Tag[];
 
-	const imageTagObjects = Array.from(imageTags).map((tagId) => {
+	const imageTagObjects = Array.from(imageTags.keys()).map((tagId) => {
 		const tagObject = tagIdToTag.get(tagId);
 
 		if (tagObject === undefined) {
@@ -390,7 +413,7 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 			}
 
 			// If the API call succeeded, add the tag to the image on our side
-			image.addTag(tagToAdd);
+			image.addTag(tagToAdd, user_id);
 		}
 	} else {
 		for (const tagToRemove of tagsToAddOrRemove) {
@@ -425,7 +448,7 @@ autorun(() => {
 			continue;
 		}
 
-		void imageListState.fetchImageById(imageId);
+		void imageListState.fetchImage(imageId);
 
 		const image = imageListState.getImageByIndexClamped(i);
 
@@ -494,10 +517,9 @@ export async function fetchTagSuggestions(image: ImageObject): Promise<[TagSugge
 
 // Initialize the state
 export async function initState() {
-	const savedSearch = localStorage.getItem("currentSearch");
+	console.log("initState: initializing state");
 
-	// Check if we're logged in
-	await checkIfLoggedIn();
+	const savedSearch = localStorage.getItem("currentSearch");
 
 	// Restore search
 	console.log(`initState: restoring search:`, savedSearch);
@@ -509,6 +531,9 @@ export async function initState() {
 			imageListState.setCurrentSearch("");
 		}
 	}
+
+	// Check if we're logged in
+	await checkIfLoggedIn();
 }
 
 // Login
@@ -543,7 +568,7 @@ autorun(() => {
 
 // Fetch metadata when logging in
 autorun(() => {
-	if (authState.loggedIn === true && tagListState.fetched === false) {
+	if (authState.loggedIn === true && tagListState.status === TagListStateStatus.Idle) {
 		tagListState.fetchTagList();
 	}
 

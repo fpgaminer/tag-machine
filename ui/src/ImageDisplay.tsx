@@ -4,6 +4,7 @@ import { currentImageState } from "./state/CurrentImage";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import React, { useEffect, useState } from "react";
 import { authState } from "./state/Auth";
+import { imageListState } from "./state/ImageList";
 
 function ImageDisplay() {
 	const [imageData, setImageData] = useState<string | null>(null);
@@ -38,17 +39,11 @@ function ImageDisplay() {
 					errorMessageState.setErrorMessage(`Error fetching image: ${error}`);
 				});
 		}
-	}, [currentImage, userToken]);
+	}, [currentImage, userToken, imageResolutionState.resolution]);
 
 	let contents = <p>Loading...</p>;
 
 	if (imageData !== null && currentImage !== null) {
-		//let url = imageHashToUrl(currentImage.hash);
-
-		//if (imageResolutionState.resolution !== null) {
-		//	url += `?size=${imageResolutionState.resolution}`;
-		//}
-
 		contents = (
 			<TransformWrapper initialScale={1} initialPositionX={0} initialPositionY={0} limitToBounds={true}>
 				{({ zoomIn, zoomOut, resetTransform, ...rest }) => (
@@ -60,6 +55,9 @@ function ImageDisplay() {
 				)}
 			</TransformWrapper>
 		);
+	} else if (currentImage === null && imageListState.searchList !== null && imageListState.searchList.length == 0) {
+		// Search results are loaded, but no image is selected
+		contents = <p>No images found</p>;
 	}
 
 	return <div className="image-display">{contents}</div>;

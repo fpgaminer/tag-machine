@@ -11,9 +11,9 @@ import { errorMessageState } from "./state";
 function ImageControls() {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editedIndex, setEditedIndex] = useState("");
-	const currentIndex = currentImageState.searchIndex ?? 0;
+	const currentIndex = currentImageState.searchIndex ?? -1;
 	const editedIdInput = useRef<HTMLInputElement>(null);
-	const searchListLength = imageListState.searchList.length;
+	const searchListLength = imageListState.searchList?.length ?? 0;
 
 	function onPrevClicked() {
 		void currentImageState.previousImage();

@@ -144,7 +144,11 @@ body, html {
 	display: flex;
 	justify-content: center;
 	align-items: center;
-	background-color: #000000;
+	background-color: #151515; /* Dark gray base */
+	background-image: 
+		linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+		linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+	background-size: 25px 25px; /* Larger grid spacing */
 }
 
 .image-display img {
@@ -157,6 +161,10 @@ body, html {
 .image-display .react-transform-component {
 	height: 100%;
 	width: 100%;
+}
+
+.image-display p {
+	color: #f0f0f0;
 }
 
 
@@ -653,6 +661,40 @@ li p {
 	border: none;
 }
 
+.captionEditorButtons {
+	font-size: 0.8em;
+}
+
+.captionEditorButtons select {
+	max-width: 80px;
+}
+
+
+/* VQA Editor */
+.vqaEditor {
+    width: 100%;
+    height: 100%;
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+    display: flex;
+    flex-direction: column;
+    padding: 10px;
+    gap: 10px;
+}
+
+.vqaEditor textarea {
+    flex: 1;
+    resize: none;
+    background-color: #2b2b2b;
+    color: #f0f0f0;
+    border: 1px solid #3f3f3f;
+    margin-bottom: 10px;
+    border-radius: 5px;
+}
+
+.vqaEditor textarea:last-child {
+    margin-bottom: 0;
+}
 
 
 /* Login Form */
@@ -720,4 +762,57 @@ li p {
     margin-bottom: 5px;
     font-size: 0.9em;
     color: #bbbbbb;
+}
+
+/* Suggested Prompts */
+.suggested-prompts {
+	background-color: #2b2b2b;
+	color: #f0f0f0;
+	padding: 10px;
+	margin: 10px;
+	border-radius: 5px;
+}
+
+.suggested-prompts h4 {
+	margin-top: 0;
+}
+
+.suggested-prompts ul {
+	list-style-type: none;
+	padding: 0;
+	margin: 0;
+}
+
+.suggested-prompts li {
+	padding: 5px 10px;
+	margin-bottom: 5px;
+	background-color: #373737;
+	border-radius: 5px;
+	cursor: pointer;
+}
+
+.suggested-prompts li:hover {
+	background-color: #474747;
+}
+
+
+.horizontal-divider {
+	height: 5px;
+	background-color: #3f3f3f;
+	cursor: row-resize;
+	flex-shrink: 0;
+}
+
+.resizable-panel {
+	overflow: hidden;
+	height: auto;
+	flex-shrink: 0;
+	display: flex;
+}
+
+/* Ensure the parent container uses flex direction column */
+.column.sideColumnLarge.spacing-5 {
+	display: flex;
+	flex-direction: column;
+	overflow: hidden;
 }
