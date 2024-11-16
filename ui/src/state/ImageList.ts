@@ -2,6 +2,7 @@ import { makeAutoObservable, runInAction } from "mobx";
 import { ImageObject, errorMessageState } from "../state";
 import * as api from "../api";
 import { currentImageState } from "./CurrentImage";
+import { SearchResultResponse } from "../tag-storm-db-types/search-result-response";
 
 const MAX_SEARCH_HISTORY = 10;
 
@@ -9,7 +10,7 @@ class ImageListState {
 	private _currentSearch: string = "";
 	imagesById: Map<number, ImageObject> = new Map<number, ImageObject>();
 	imagesByHash: Map<string, ImageObject> = new Map<string, ImageObject>();
-	searchList: Array<number> | null = null;
+	searchList: Uint32Array | null = null;
 	searchHistory: Array<string> = new Array<string>();
 	private version = 0; // Used to keep track of async search results
 	initialSearchPerformed: boolean = false; // During initialization we wait until we're logged in, and then we can perform the initial search
@@ -54,26 +55,30 @@ class ImageListState {
 		return this._currentSearch;
 	}
 
-	_incrementVersion() {
-		this.version += 1;
-	}
-
 	async performSearch() {
-		this._incrementVersion();
+		runInAction(() => {
+			this.version += 1;
+		});
 
 		const version = this.version;
 		const search = this.currentSearch;
 		console.log(`Performing search for search:${search} (version ${version})`);
 
-		let searchResults: api.ApiSearchResults;
+		let searchResultIds: Uint32Array;
 		try {
 			if (search === "") {
 				// While the server supports an empty search, in the UI it's probably just the initial state.
 				// Since a blank search takes a long time to return, we'll just return an empty list.
 				// If users really want all images, they can work around this by searching for a space.
-				searchResults = { id: [] };
+				searchResultIds = new Uint32Array();
 			} else {
-				searchResults = await api.searchImages(["id"], null, search);
+				const result = await api.searchImages(["id"], null, search);
+
+				if (result instanceof Uint32Array) {
+					searchResultIds = result;
+				} else {
+					throw Error(`Unexpected search result type: ${result}`);
+				}
 			}
 		} catch (error) {
 			runInAction(() => {
@@ -82,10 +87,10 @@ class ImageListState {
 			return;
 		}
 
-		this.updateSearchList(version, search, searchResults);
+		this.updateSearchList(version, search, searchResultIds);
 	}
 
-	updateSearchList(forVersion: number, search: string, results: api.ApiSearchResults) {
+	updateSearchList(forVersion: number, search: string, results: Uint32Array) {
 		if (forVersion != this.version) {
 			console.log(`Ignoring search results for version ${forVersion} (current version is ${this.version})`);
 			return;
@@ -93,12 +98,8 @@ class ImageListState {
 
 		console.log(`Updating search results for version ${forVersion}`);
 
-		if (results.id === undefined) {
-			throw Error(`Search results missing id list`);
-		}
-
 		// Add the results to the search list
-		this.searchList = results.id.slice();
+		this.searchList = results.slice();
 
 		// Restore current image ID if it was saved and in the search results
 		if (currentImageState.imageId === null) {

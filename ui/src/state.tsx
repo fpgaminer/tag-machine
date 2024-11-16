@@ -1,4 +1,4 @@
-import { autorun, makeAutoObservable, reaction, runInAction } from "mobx";
+import { autorun, computed, makeAutoObservable, makeObservable, reaction, runInAction } from "mobx";
 import * as api from "./api";
 import { imageListState } from "./state/ImageList";
 import { tagListState, TagListStateStatus } from "./state/TagList";
@@ -96,15 +96,19 @@ export class ImageObject {
 }
 
 export class Tag {
-	id: number;
-	name: string;
-	active: boolean;
+	readonly id: number;
+	readonly name: string;
+	readonly active: boolean;
 
 	constructor(id: number, name: string, active: boolean) {
 		this.id = id;
 		this.name = name;
 		this.active = active;
-		makeAutoObservable(this);
+
+		//makeAutoObservable(this);
+		makeObservable(this, {
+			favorite: computed,
+		});
 	}
 
 	get favorite(): boolean {
@@ -559,22 +563,45 @@ export async function login(username: string, password: string | null, key: stri
 // Automatically switch to login screen if not logged in, or away from login screen if logged in
 autorun(() => {
 	if (authState.loggedIn === true && (windowState.state === WindowStates.Login || windowState.state === null)) {
-		windowState.restoreWindowState();
+		runInAction(() => {
+			windowState.restoreWindowState();
+		});
 	}
 	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login) {
-		windowState.setWindowState(WindowStates.Login);
+		runInAction(() => {
+			windowState.setWindowState(WindowStates.Login);
+		});
 	}
 });
 
 // Fetch metadata when logging in
-autorun(() => {
+/*autorun(() => {
 	if (authState.loggedIn === true && tagListState.status === TagListStateStatus.Idle) {
 		tagListState.fetchTagList();
 	}
 
 	if (authState.loggedIn === true && imageListState.initialSearchPerformed === false) {
-		imageListState.performSearch().then(() => {
-			imageListState.setInitialSearchPerformed();
+		runInAction(() => {
+			imageListState.performSearch().then(() => {
+				imageListState.setInitialSearchPerformed();
+			});
 		});
 	}
-});
+});*/
+
+reaction(
+	() => authState.loggedIn,
+	(loggedIn) => {
+		if (loggedIn === true) {
+			tagListState.fetchTagList();
+		}
+
+		if (loggedIn === true) {
+			runInAction(() => {
+				imageListState.performSearch().then(() => {
+					imageListState.setInitialSearchPerformed();
+				});
+			});
+		}
+	}
+)

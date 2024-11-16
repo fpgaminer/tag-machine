@@ -1,4 +1,10 @@
+import { ByteBuffer } from "flatbuffers";
 import { authState } from "./state/Auth";
+import { SearchResultResponse } from "./tag-storm-db-types/search-result-response";
+import { ResponseType } from "./tag-storm-db-types/response-type";
+import { IDResponse } from "./tag-storm-db-types/idresponse";
+import { HashResponse } from "./tag-storm-db-types/hash-response";
+import { ImageResponse } from "./tag-storm-db-types/image-response";
 
 export const API_URL = "/api";
 const PREDICTION_API_URL = "/prediction";
@@ -26,23 +32,6 @@ interface ApiCaptionSuggestion {
 	caption: string;
 }
 
-export interface ApiSearchImageResult {
-	id?: number;
-	hash?: string;
-	tags?: number[];
-	attributes?: { [key: string]: string[] };
-	active?: boolean;
-	caption?: string;
-	count?: number;
-	min_id?: number;
-	max_id?: number;
-}
-
-export interface ApiSearchResults {
-	images?: ApiSearchImageResult[];
-	id?: number[];
-}
-
 export interface ApiTagMappings {
 	aliases: { [key: string]: string };
 	implications: { [key: string]: string[] };
@@ -60,7 +49,7 @@ export interface ApiLoginResponse {
 	token: string;
 }
 
-export type SearchSelect = "id" | "hash" | "tags" | "attributes" | "active" | "caption" | "count" | "min_id" | "max_id";
+export type SearchSelect = "id" | "hash" | "tags" | "attributes";
 
 export async function authenticatedFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
 	const user_token = authState.user_token;
@@ -118,31 +107,47 @@ export async function removeTag(name: string): Promise<void> {
 	return;
 }
 
-/*export async function searchImages(
-	select: SearchSelect[],
-	orderBy: SearchOrderBy | null,
-	limit: number | null,
-	operator: SearchOperator | null
-): Promise<ApiSearchResults> {*/
 export async function searchImages(
 	select: SearchSelect[],
 	limit: number | null,
 	query: string,
-): Promise<ApiSearchResults> {
+): Promise<Uint32Array | HashResponse | ImageResponse> {
+	// Combine select into a comma-separated string
+	const selectString = select.join(",");
+
 	const params = new URLSearchParams({
 		query: query,
+		select: selectString,
 	}).toString();
 	const response = await authenticatedFetch(`${API_URL}/search/images?${params}`, {
 		method: "GET",
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to search images: ${response.status}`);
+		throw new Error(`Failed to search images: ${response.status}: ${await response.text()}`);
 	}
 
-	return {
-		id: await response.json(),
-	};
+	const arrayBuffer = await response.arrayBuffer();
+	const byteBuffer = new ByteBuffer(new Uint8Array(arrayBuffer));
+	const searchResults = SearchResultResponse.getRootAsSearchResultResponse(byteBuffer);
+	const responseType = searchResults.dataType();
+
+	switch (responseType) {
+		case ResponseType.IDResponse: {
+			const idResponse = searchResults.data(new IDResponse()) as IDResponse;
+			return idResponse.idsArray()!;
+		}
+		case ResponseType.HashResponse: {
+			const hashResponse = searchResults.data(new HashResponse()) as HashResponse;
+			return hashResponse;
+		}
+		case ResponseType.ImageResponse: {
+			const imageResponse = searchResults.data(new ImageResponse()) as ImageResponse;
+			return imageResponse;
+		}
+	}
+
+	throw new Error(`Unknown response type: ${responseType}`);
 }
 
 export async function getImageMetadata(identifier: number | string): Promise<ApiImage | null> {
