@@ -339,12 +339,15 @@ li p {
 
 /* ImageInfo Popup */
 .popup-background {
-	width: 100vw;
-	height: 100vh;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	background-color: rgba(0, 0, 0, 0.3);
 	position: fixed;
 	top: 0;
 	left: 0;
-	background-color: transparent;
+	width: 100vw;
+	height: 100vh;
 	z-index: 9998;
 }
 
@@ -560,14 +563,161 @@ li p {
 }
 
 
+/* Popup Window */
+.popup-window {
+	width: 800px;
+	height: 90vh;
+	max-width: 90%;
+	max-height: 400px;
+	background-color: #3a3a3a;
+	border: 1px solid #444;
+	border-radius: 10px;
+	box-shadow: 0 8px 20px rgba(0, 0, 0, 0.5);
+	overflow: hidden;
+}
+
+.popup-window-content {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+}
+
+.popup-window-header {
+	display: flex;
+	flex-direction: row;
+	justify-content: space-between;
+	align-items: center;
+	padding: 0;
+	background-color: #2d2d2d;
+	border-bottom: 1px solid #444;
+}
+
+.popup-window-title {
+	font-size: 1.2em;
+	font-weight: bold;
+	color: #e5e5e5;
+	padding: 15px 20px;
+}
+
+.popup-window-close {
+	cursor: pointer;
+	font-size: 1.5em;
+	color: #888;
+	transition: color 0.2s;
+	height: 100%;
+	display: flex;
+	align-items: center;
+	padding: 0 20px;
+	border-left: 3px solid #222;
+}
+
+.popup-window-close:hover {
+	color: #e5e5e5;
+}
+
+.popup-window-body {
+	padding: 5px 20px;
+	overflow-y: auto;
+	box-sizing: border-box;
+	margin-bottom: 20px;
+	color: #dcdcdc;
+}
+
+.popup-window-body-content {
+	color: #f0f0f0;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+	padding: 10px 10px;
+}
+
+.popup-window-body-content a {
+	color: #f0f0f0;
+}
+
+/* Input and Button Styles */
+.popup-window input[type="text"] {
+	width: 400px;
+	padding: 10px;
+	margin-top: 10px;
+	border-radius: 5px;
+	border: none;
+	color: #2b2b2b;
+	background-color: #f0f0f0;
+}
+
+.popup-window button {
+	min-width: 100px;
+	padding: 10px;
+	margin-top: 10px;
+	border-radius: 5px;
+	border: none;
+	cursor: pointer;
+}
+
+.popup-window input[type="file"] {
+	display: none;
+}
+
+.popup-window-body-content input[type="password"],
+.popup-window-body-content input[type="text"] {
+	width: 100%;
+	padding: 10px;
+	border-radius: 4px;
+	border: 1px solid #2d2d2d;
+	background-color: #3f3f3f;
+	color: #e5e5e5;
+	box-sizing: border-box;
+}
+
+.popup-window-body-content input[type="password"]::placeholder,
+.popup-window-body-content input[type="text"]::placeholder {
+	color: #aaaaaa;
+}
+
+.popup-window-body-content input[type="password"]:focus,
+.popup-window-body-content input[type="text"]:focus {
+	outline: none;
+	border-color: #888;
+}
+
+.popup-window-body-content button {
+	padding: 10px 20px;
+	margin-top: 10px;
+	border-radius: 4px;
+	border: none;
+	background-color: #26a69a;
+	color: #ffffff;
+	cursor: pointer;
+	font-size: 1em;
+	font-weight: bold;
+	text-transform: uppercase;
+	transition: background-color 0.2s ease-in-out, border-color 0.2s;
+}
+
+.popup-window-body-content button:hover {
+	background-color: #2bbbad;
+	border-color: #666;
+}
+
+
 /* Error Message */
 .error-message {
 	text-align: center;
-	width: 100%;
-	padding: 5px;
-	background-color: #981818;
+	width: 90%;
+	max-width: 800px;
+	padding: 10px;
+	background-color: #b51a1a;
 	color: #f0f0f0;
 	cursor: pointer;
+	position: fixed;
+	top: 20px;
+	left: 50%;
+	z-index: 10000;
+	border-radius: 8px;
+	transform: translateX(-50%);
 }
 
 
@@ -577,7 +727,7 @@ li p {
 	display: flex;
 	flex-direction: row;
 	gap: 20px;
-	justify-content: flex-end;
+	justify-content: space-between;
 	width: 100%;
 }
 
@@ -634,6 +784,15 @@ li p {
 .menu-item a:hover {
 	background-color: #939393;
 	color: #ffffff;
+}
+
+.menu-item.logo {
+	margin-right: auto;
+}
+
+.menu-item.logo img {
+	height: 40px;
+	width: auto;
 }
 
 
@@ -711,7 +870,7 @@ li p {
     color: #f0f0f0;
     font-family: 'Noto Sans', sans-serif;
 	width: 300px;
-	max-height: 400px;
+	max-height: 500px;
 	margin: auto;
 }
 
@@ -759,10 +918,140 @@ li p {
 }
 
 .loginForm div > label {
-    margin-bottom: 5px;
-    font-size: 0.9em;
-    color: #bbbbbb;
+	margin-bottom: 5px;
+	font-size: 0.9em;
+	color: #bbbbbb;
 }
+
+
+/* Register Form */
+.registerFormContainer {
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	height: calc(100vh - 40px);
+	padding: 20px 0;
+	box-sizing: border-box;
+}
+
+.registerForm {
+	background-color: #2b2b2b;
+	padding: 30px;
+	border-radius: 10px;
+	box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: 20px;
+	color: #f0f0f0;
+	font-family: 'Noto Sans', sans-serif;
+	max-width: 650px;
+	max-height: 100%;
+	box-sizing: border-box;
+	overflow-y: auto;
+	margin: auto 0;
+}
+
+.registerForm div {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	margin-bottom: 10px;
+}
+
+.registerForm div > input {
+	width: 100%;
+    padding: 15px;
+    font-size: 1em;
+    border-radius: 5px;
+    border: none;
+    background-color: #3f3f3f;
+    color: #f0f0f0;
+	box-sizing: border-box;
+}
+
+.registerForm div > input:focus {
+    outline: none;
+    box-shadow: 0 0 5px rgba(255, 255, 255, 0.5);
+}
+
+.registerForm button {
+    width: 100%;
+    padding: 12px;
+    background-color: #4caf50;
+    border: none;
+    border-radius: 5px;
+    color: white;
+    font-size: 1.1em;
+	font-weight: bold;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background-color 0.3s ease;
+}
+
+.registerForm button:hover {
+    background-color: #45a049;
+}
+
+.registerForm button:active {
+    transform: scale(0.98);
+}
+
+.registerForm button:disabled {
+	background-color: #9e9e9e;
+	cursor: not-allowed;
+}
+
+.registerForm label {
+    margin-bottom: 5px;
+    font-size: 1em;
+    color: #f0f0f0;
+	font-weight: bold;
+	display: inline-block;
+}
+
+.registerForm h2 {
+	font-size: 1.5em;
+	color: #f0f0f0;
+	margin-bottom: 0px;
+	margin-top: 0px;
+	text-align: center;
+}
+
+.registerForm .content-warning-checkbox {
+	display: flex;
+	align-items: center;
+	margin-top: 10px;
+	flex-direction: row;
+	align-items: center;
+	justify-content: center;
+}
+
+.registerForm .content-warning-checkbox input {
+	margin-right: 10px;
+	transform: scale(1.5);
+	cursor: pointer;
+	accent-color: #4caf50;
+	width: auto;
+}
+
+.registerForm .content-warning-checkbox label {
+	font-size: 1em;
+	color: #f0f0f0;
+	font-weight: normal;
+	line-height: 1.4;
+}
+
+.registerForm .legalWarning {
+	color: #ff4b4b;
+	font-size: 0.9em;
+	text-align: center;
+	padding: 10px;
+	background: rgba(255, 75, 75, 0.1);
+	border: 1px solid #ff4b4b;
+	border-radius: 5px;
+}
+
 
 /* Suggested Prompts */
 .suggested-prompts {
@@ -815,4 +1104,114 @@ li p {
 	display: flex;
 	flex-direction: column;
 	overflow: hidden;
+}
+
+/* User Token List */
+.token-list {
+	margin-top: 20px;
+}
+
+.token-item {
+	display: flex;
+	align-items: center;
+	background-color: #2d2d2d;
+	border: 1px solid #444;
+	border-radius: 4px;
+	padding: 10px;
+	margin-bottom: 5px;
+	color: #dcdcdc;
+}
+
+.token-item input[type="checkbox"] {
+	margin-right: 15px;
+	transform: scale(1.2);
+}
+
+.token-item .token-value {
+	font-family: monospace;
+	word-break: break-all;
+	color: #cccccc;
+}
+
+.token-item.active::after {
+	content: "(current token)";
+	margin-left: 20px;
+	font-size: 0.8em;
+}
+
+.new-token-display {
+	background-color: #2d2d2d;
+	border: 1px solid #444;
+	padding: 15px;
+	border-radius: 4px;
+	margin-top: 20px;
+	color: #dcdcdc;
+}
+
+.new-token-display .token-value {
+	font-family: monospace;
+	word-break: break-all;
+	background-color: #1f1f1f;
+	padding: 10px;
+	border: 1px solid #555;
+	border-radius: 4px;
+	margin-top: 5px;
+	color: #e5e5e5;
+}
+
+
+/* User Settings Popup */
+.user-popup-window {
+	max-height: 800px;
+}
+
+.user-settings-section {
+	margin-bottom: 30px;
+}
+
+.user-settings-section h2 {
+	font-size: 1.2em;
+	margin-bottom: 15px;
+	color: #e5e5e5;
+	border-bottom: 1px solid #555;
+	padding-bottom: 5px;
+}
+
+.user-settings-section p {
+	margin-bottom: 15px;
+	color: #cccccc;
+}
+
+.user-settings-section strong {
+	color: #f0f0f0;
+	font-weight: bold;
+}
+
+.input-group {
+	display: flex;
+	align-items: center;
+	margin-bottom: 15px;
+}
+
+.input-group label {
+	width: 150px;
+	margin-bottom: 0;
+	color: #aaaaaa;
+	font-size: 0.9em;
+}
+
+.input-group input[type="password"],
+.input-group input[type="text"] {
+	flex: 1;
+}
+
+.user-popup-window .logout-button, .user-popup-window .invalidate-button {
+	background-color: #d32f2f;
+	border-color: #d32f2f;
+	color: #ffffff;
+}
+
+.user-popup-window .logout-button:hover, .user-popup-window .invalidate-button:hover {
+	background-color: #e57373;
+	border-color: #e57373;
 }

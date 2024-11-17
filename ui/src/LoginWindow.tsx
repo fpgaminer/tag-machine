@@ -1,22 +1,18 @@
 import { observer } from "mobx-react";
 import React, { useState } from "react";
-import { errorMessageState, login } from "./state";
+import { errorMessageState, login, windowState, WindowStates } from "./state";
 
 function LoginWindow() {
 	const [username, setUsername] = useState("");
 	const [password, setPassword] = useState("");
-	const [key, setKey] = useState("");
 
 	async function onLoginClicked() {
 		try {
-			if (key !== "") {
-				await login(username, null, key);
-			}
-			else if (password !== "") {
+			if (password !== "") {
 				await login(username, password, null);
 			}
 			else {
-				errorMessageState.setErrorMessage("Please enter a password or key");
+				errorMessageState.setErrorMessage("Please enter a password");
 				return;
 			}
 		}
@@ -24,6 +20,10 @@ function LoginWindow() {
 			errorMessageState.setErrorMessage(`Error logging in: ${error as string}`);
 			return;
 		}
+	}
+
+	function onRegisterClicked() {
+		windowState.setWindowState(WindowStates.Register);
 	}
 
 	return (
@@ -34,9 +34,9 @@ function LoginWindow() {
 				<div><input type="text" onChange={(e) => setUsername(e.target.value)} value={username} /></div>
 				<div>Password:</div>
 				<div><input type="password" onChange={(e) => setPassword(e.target.value)} value={password} /></div>
-				<div>Key:</div>
-				<div><input type="password" onChange={(e) => setKey(e.target.value)} value={key} /></div>
 				<div><button onClick={onLoginClicked}>Login</button></div>
+				<p>Don't have an account?</p>
+				<div><button onClick={onRegisterClicked}>Go to Create Account</button></div>
 			</div>
 			<div className="column remainingSpace spacing-5"></div>
 		</div>

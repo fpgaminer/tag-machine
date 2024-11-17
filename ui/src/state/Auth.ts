@@ -48,7 +48,7 @@ export async function checkIfLoggedIn() {
 	}
 
 	try {
-		const user_info = await api.user_info();
+		const user_info = await api.userInfo();
 		console.log("User info:", user_info);
 		console.log("Setting logged in to", user_info !== null);
 		authState.setLoggedIn(user_info !== null);

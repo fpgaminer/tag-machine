@@ -150,6 +150,7 @@ export enum WindowStates {
 	Tagging = "tagging",
 	Captioning = "captioning",
 	Vqa = "vqa",
+	Register = "register",
 }
 
 class WindowState {
@@ -162,7 +163,7 @@ class WindowState {
 	setWindowState(state: WindowStates) {
 		this.state = state;
 
-		if (state !== WindowStates.Login) {
+		if (state !== WindowStates.Login && state !== WindowStates.Register) {
 			localStorage.setItem("lastWindowState", state);
 		}
 	}
@@ -250,6 +251,20 @@ class UploadPopupState {
 }
 
 export const uploadPopupState = new UploadPopupState();
+
+class UserSettingsPopupState {
+	visible = false;
+
+	constructor() {
+		makeAutoObservable(this);
+	}
+
+	setVisible(visible: boolean) {
+		this.visible = visible;
+	}
+}
+
+export const userSettingsPopupState = new UserSettingsPopupState();
 
 class FavoriteTagsState {
 	_favoriteTags: Set<string> = new Set(JSON.parse(localStorage.getItem("favoriteTags") || "[]") as string[]);
@@ -540,16 +555,22 @@ export async function initState() {
 	await checkIfLoggedIn();
 }
 
+export async function login_key_from_password(username: string, password: string): Promise<string> {
+	// Scrypt the password
+	const login_key = await scryptAsync(password, username, { N: 2 ** 16, r: 8, p: 1, dkLen: 32 });
+	
+	// Hex encode the login key
+	const login_key_hex = Array.from(login_key).map(byte => byte.toString(16).padStart(2, '0')).join('');
+
+	return login_key_hex;
+}
+
 // Login
 export async function login(username: string, password: string | null, key: string | null) {
 	let login_key = key;
 
 	if (login_key === null && password !== null) {
-		// Scrypt the password
-		const encodedPassword = await scryptAsync(password, username, { N: 2 ** 16, r: 8, p: 1, dkLen: 32 });
-
-		// Hex encode the password
-		login_key = Array.from(encodedPassword).map(byte => byte.toString(16).padStart(2, '0')).join('');
+		login_key = await login_key_from_password(username, password);
 	}
 	else if (login_key === null) {
 		throw Error("No password or key provided");
@@ -562,12 +583,14 @@ export async function login(username: string, password: string | null, key: stri
 
 // Automatically switch to login screen if not logged in, or away from login screen if logged in
 autorun(() => {
+	const url_hash = window.location.hash;
+
 	if (authState.loggedIn === true && (windowState.state === WindowStates.Login || windowState.state === null)) {
 		runInAction(() => {
 			windowState.restoreWindowState();
 		});
 	}
-	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login) {
+	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login && windowState.state !== WindowStates.Register) {
 		runInAction(() => {
 			windowState.setWindowState(WindowStates.Login);
 		});

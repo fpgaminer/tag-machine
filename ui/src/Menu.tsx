@@ -3,6 +3,7 @@ import add24Filled from "@iconify/icons-fluent/add-24-filled";
 import arrowUpload24Filled from "@iconify/icons-fluent/arrow-upload-24-filled";
 import info24Regular from "@iconify/icons-fluent/info-24-regular";
 import arrowDownload4Filled from "@iconify/icons-fluent/arrow-download-24-filled";
+import settings24Regular from "@iconify/icons-fluent/settings-24-regular";
 import { Icon } from "@iconify/react";
 import { tagListState } from "./state/TagList";
 import React, { useEffect } from "react";
@@ -15,6 +16,7 @@ import {
 	WindowStates,
 	imageResolutionState,
 	imageHashToUrl,
+	userSettingsPopupState,
 } from "./state";
 import { currentImageState } from "./state/CurrentImage";
 import { API_URL, authenticatedFetch } from "./api";
@@ -91,10 +93,17 @@ function Menu() {
 		}
 	}
 
+	function userSettingsClicked() {
+		userSettingsPopupState.setVisible(true);
+	}
+
 	const download_url = currentImage === null ? "" : imageHashToUrl(currentImage.hash);
 
 	return (
 		<div className="menu">
+			<div className="menu-item logo">
+				<img src="/icon.svg" alt="Website Logo" />
+			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={onDownloadClicked}>
 					<Icon icon={arrowDownload4Filled} />
@@ -147,6 +156,11 @@ function Menu() {
 				</datalist>
 				<button className="menu-button" onClick={searchClicked}>
 					Search
+				</button>
+			</div>
+			<div className="menu-item">
+				<button className="menu-button" onClick={userSettingsClicked}>
+					<Icon icon={settings24Regular} />
 				</button>
 			</div>
 		</div>

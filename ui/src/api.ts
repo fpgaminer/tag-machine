@@ -360,7 +360,7 @@ export async function login(username: string, login_key: string): Promise<string
 	return json.token;
 }
 
-export async function user_info(): Promise<ApiUserInfo | null> {
+export async function userInfo(): Promise<ApiUserInfo | null> {
 	const response = await authenticatedFetch(`${API_URL}/users/me`);
 
 	if (response.status === 401) {
@@ -372,4 +372,87 @@ export async function user_info(): Promise<ApiUserInfo | null> {
 	}
 
 	return (await response.json()) as ApiUserInfo;
+}
+
+export async function createUser(username: string, login_key: string, cf_turnstile_token: string, birthdate: number, invite_code: string): Promise<void> {
+	const response = await fetch(`${API_URL}/users`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			username,
+			login_key,
+			cf_turnstile_token,
+			birthdate,
+			invite_code,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to create user: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
+}
+
+export async function invalidateUserToken(token: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/users/me/tokens/invalidate`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			token,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to invalidate user token: ${response.status}: ${await response.text()}`);
+	}
+
+	// If the token is the current user's token, clear it
+	if (token === authState.user_token) {
+		authState.clearToken();
+	}
+
+	return;
+}
+
+export async function changeUserLoginKey(new_login_key: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/users/me/login_key`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			new_login_key,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to change user login key: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
+}
+
+export async function listUserTokens(): Promise<string[]> {
+	const response = await authenticatedFetch(`${API_URL}/users/me/tokens`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to list user tokens: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.json()) as string[];
+}
+
+export async function getCfTurnstileKey(): Promise<string> {
+	const response = await fetch(`${API_URL}/cf_turnstile_key`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to get Cloudflare Turnstile key: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.text());
 }
