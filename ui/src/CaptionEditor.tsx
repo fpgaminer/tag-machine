@@ -3,8 +3,8 @@ import { currentImageState } from "./state/CurrentImage";
 import React, { useEffect, useState } from "react";
 import { autorun } from "mobx";
 import { addImageAttribute, suggestCaption } from "./state";
-import llama3Tokenizer, { Llama3Tokenizer } from "./llama3Tokenizer";
 import { AutoTokenizer } from '@xenova/transformers';
+import { tokenizeString, useWorker } from "./Llama3TokenizerProxy";
 
 const tokenizer = await AutoTokenizer.from_pretrained('openai/clip-vit-large-patch14');
 
@@ -49,6 +49,7 @@ function CaptionEditor() {
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
 	const [captionTone, setCaptionTone] = useState<CaptionTone>("formal");
 	const [captionLength, setCaptionLength] = useState<CaptionLength>(null);
+	const [tokens, setTokens] = useState<string[]>([]);
 
 	// Save button state
 	const [saving, setSaving] = useState(SaveButtonState.Idle);
@@ -72,8 +73,24 @@ function CaptionEditor() {
 	const isUnsaved = localCaption != (currentText ?? "");
 
 	// Count tokens
-	const tokens = llama3Tokenizer.encode(localCaption, undefined);
 	const clip_tokens = tokenizer.encode(localCaption, null, { add_special_tokens: false });
+
+	useEffect(() => {
+		const text = localCaption;
+		const fetchTokens = async () => {
+			try {
+				const { resultText, resultTokens } = await tokenizeString(text);
+				if (resultText === text) {
+					setTokens(resultTokens);
+					return;
+				}
+			} catch (e) {
+				console.error(e);
+			}
+		};
+
+		fetchTokens();
+	}, [localCaption]);
 
 	// Update the caption when the current image changes
 	useEffect(
