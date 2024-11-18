@@ -353,15 +353,15 @@ export async function login(username: string, login_key: string): Promise<string
 	});
 
 	if (!response.ok) {
-		throw new Error(`Failed to login: ${response.status}`);
+		throw new Error(`Failed to login: ${response.status}: ${await response.text()}`);
 	}
 
 	const json = (await response.json()) as ApiLoginResponse;
 	return json.token;
 }
 
-export async function userInfo(): Promise<ApiUserInfo | null> {
-	const response = await authenticatedFetch(`${API_URL}/users/me`);
+export async function userInfo(userId: number | string): Promise<ApiUserInfo | null> {
+	const response = await authenticatedFetch(`${API_URL}/users/${userId}`);
 
 	if (response.status === 401) {
 		return null;
@@ -437,8 +437,8 @@ export async function changeUserLoginKey(new_login_key: string): Promise<void> {
 	return;
 }
 
-export async function listUserTokens(): Promise<string[]> {
-	const response = await authenticatedFetch(`${API_URL}/users/me/tokens`);
+export async function listUserTokens(userId: number | string): Promise<string[]> {
+	const response = await authenticatedFetch(`${API_URL}/users/${userId}/tokens`);
 
 	if (!response.ok) {
 		throw new Error(`Failed to list user tokens: ${response.status}: ${await response.text()}`);
@@ -455,4 +455,32 @@ export async function getCfTurnstileKey(): Promise<string> {
 	}
 
 	return (await response.text());
+}
+
+export async function listUsers(): Promise<ApiUserInfo[]> {
+	const response = await authenticatedFetch(`${API_URL}/users`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to list users: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.json()) as ApiUserInfo[];
+}
+
+export async function changeUserScopes(userId: number, scopes: string): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/users/${userId}/scopes`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			new_scopes: scopes,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to change user scopes: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
 }

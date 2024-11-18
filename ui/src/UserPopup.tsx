@@ -17,7 +17,7 @@ function UserPopup() {
 
 	async function fetchUserInfo() {
 		try {
-			const info = await userInfo();
+			const info = await userInfo("me");
 
 			if (info === null) {
 				errorMessageState.setErrorMessage("Failed to get user info: not logged in");
@@ -32,7 +32,7 @@ function UserPopup() {
 
 	async function fetchUserTokens() {
 		try {
-			const tokens = await api.listUserTokens();
+			const tokens = await api.listUserTokens("me");
 
 			setTokens(tokens);
 		} catch (error) {

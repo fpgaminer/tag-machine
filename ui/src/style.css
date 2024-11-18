@@ -565,9 +565,9 @@ li p {
 
 /* Popup Window */
 .popup-window {
-	width: 800px;
+	width: 90%;
 	height: 90vh;
-	max-width: 90%;
+	max-width: 800px;
 	max-height: 400px;
 	background-color: #3a3a3a;
 	border: 1px solid #444;
@@ -1214,4 +1214,65 @@ li p {
 .user-popup-window .logout-button:hover, .user-popup-window .invalidate-button:hover {
 	background-color: #e57373;
 	border-color: #e57373;
+}
+
+/* Admin Popup User List */
+.admin-popup-window {
+	max-width: 1000px;
+}
+
+.admin-popup-window .user-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.admin-popup-window .user-item {
+    display: flex;
+    align-items: center;
+    background-color: #2d2d2d;
+    padding: 10px;
+    border-radius: 5px;
+}
+
+.admin-popup-window .user-item-id,
+.admin-popup-window .user-item-username,
+.admin-popup-window .user-item-scopes {
+    color: #f0f0f0;
+    margin-right: 20px;
+}
+
+.admin-popup-window .user-item-id {
+    width: 50px;
+    text-align: center;
+}
+
+.admin-popup-window .user-item-username {
+	flex: 1;
+}
+
+.admin-popup-window .user-item-scopes {
+	flex: 3;
+	font-family: monospace;
+	font-size: 0.8em;
+}
+
+.admin-popup-window .user-list-header {
+	display: flex;
+	align-items: center;
+	background-color: #3a3a3a;
+	padding: 10px;
+	border-radius: 5px;
+	font-weight: bold;
+}
+
+.admin-popup-window .user-list .user-item-buttons {
+	flex: 1;
+}
+
+.admin-popup-window .user-list button {
+	font-size: 0.7em;
+	padding: 5px;
+	margin: 0;
 }

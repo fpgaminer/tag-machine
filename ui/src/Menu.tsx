@@ -17,6 +17,7 @@ import {
 	imageResolutionState,
 	imageHashToUrl,
 	userSettingsPopupState,
+	adminPanelPopupState,
 } from "./state";
 import { currentImageState } from "./state/CurrentImage";
 import { API_URL, authenticatedFetch } from "./api";
@@ -93,11 +94,13 @@ function Menu() {
 		}
 	}
 
-	function userSettingsClicked() {
-		userSettingsPopupState.setVisible(true);
+	function userSettingsClicked(event: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
+		if (event.altKey) {
+			adminPanelPopupState.setVisible(true);
+		} else {
+			userSettingsPopupState.setVisible(true);
+		}
 	}
-
-	const download_url = currentImage === null ? "" : imageHashToUrl(currentImage.hash);
 
 	return (
 		<div className="menu">

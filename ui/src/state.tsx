@@ -266,6 +266,21 @@ class UserSettingsPopupState {
 
 export const userSettingsPopupState = new UserSettingsPopupState();
 
+/* Admin Panel Popup State */
+class AdminPanelPopupState {
+	visible = false;
+
+	constructor() {
+		makeAutoObservable(this);
+	}
+
+	setVisible(visible: boolean) {
+		this.visible = visible;
+	}
+}
+
+export const adminPanelPopupState = new AdminPanelPopupState();
+
 class FavoriteTagsState {
 	_favoriteTags: Set<string> = new Set(JSON.parse(localStorage.getItem("favoriteTags") || "[]") as string[]);
 

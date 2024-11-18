@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import WikiPopup from "./WikiPopup";
-import { WindowStates, imageInfoPopupState, uploadPopupState, userSettingsPopupState, wikiPopupState, windowState } from "./state";
+import { WindowStates, adminPanelPopupState, imageInfoPopupState, uploadPopupState, userSettingsPopupState, wikiPopupState, windowState } from "./state";
 import ErrorMessage from "./ErrorMessage";
 import Menu from "./Menu";
 import ImageInfoPopup from "./ImageInfoPopup";
@@ -11,6 +11,7 @@ import LoginWindow from "./LoginWindow";
 import VQAMode from "./VQAMode";
 import RegisterWindow from "./RegisterWindow";
 import UserPopup from "./UserPopup";
+import AdminPopup from "./AdminPopup";
 
 function App() {
 	const wikiPopupVisible = wikiPopupState.visible;
@@ -19,6 +20,7 @@ function App() {
 	const imageInfoPopupImage = imageInfoPopupState.image;
 	const uploadPopupVisible = uploadPopupState.visible;
 	const userSettingsPopupVisible = userSettingsPopupState.visible;
+	const adminPanelPopupVisible = adminPanelPopupState.visible;
 	const windowStateState = windowState.state;
 
 	return (
@@ -27,6 +29,7 @@ function App() {
 			{imageInfoPopupVisible && imageInfoPopupImage !== null ? <ImageInfoPopup image={imageInfoPopupImage} /> : null}
 			{uploadPopupVisible ? <UploadPopup /> : null}
 			{userSettingsPopupVisible ? <UserPopup /> : null}
+			{adminPanelPopupVisible ? <AdminPopup /> : null}
 			<div className="column remainingSpace">
 				<div className="row contentBased">
 					<ErrorMessage />
