@@ -50,6 +50,7 @@ autorun(
 		try {
 			associations = await api.getTagImageAssociations(tags, currentImageHash);
 		} catch (error) {
+			console.log("Error fetching tag associations:", error);
 			// Check if it's a 502 error
 			if (error instanceof Response && error.status === 502) {
 				// If it is, don't show an error message

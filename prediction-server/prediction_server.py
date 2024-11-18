@@ -17,6 +17,8 @@ import argparse
 from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModel
 from torch import nn
 import yaml
+import io
+from hashlib import sha256
 
 from Models import VisionModel
 from MultiModel import LlamaMultiModel
@@ -47,14 +49,12 @@ IMAGE_SIZE = 448
 
 
 @dataclass
-class ImageJob:
-	image_hash: bytes
+class TagPredictionJob:
 	image: Image.Image
 
 
 @dataclass
 class ImageCaptioningJob:
-	image_hash: bytes
 	image: Image.Image
 	prompt: str
 
@@ -67,8 +67,8 @@ class TagAssocJob:
 @dataclass
 class TagImageAssocJob:
 	tags: list[str]
-	image_hash: bytes
 	image: Image.Image
+	image_hash: bytes
 
 
 thread_local = threading.local()
@@ -102,7 +102,7 @@ def load_tag_assoc_model(model_path: Path):
 
 	model = LlamaMultiModel.from_pretrained(model_path / 'model', image_embedding_dim=768)
 	assert isinstance(model, LlamaMultiModel)
-	model = model.to('cuda')
+	model = model.to('cuda') # type: ignore
 	#model = torch.compile(model)  # Input sizes vary a lot
 	model.eval()
 
@@ -170,56 +170,6 @@ class ImageAdapter(nn.Module):
 
 	def get_eot_embedding(self):
 		return self.other_tokens(torch.tensor([2], device=self.other_tokens.weight.device)).squeeze(0)
-
-
-# class ImageAdapter(nn.Module):
-# 	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool, n_modes: int):
-# 		super().__init__()
-# 		self.deep_extract = deep_extract
-
-# 		if self.deep_extract:
-# 			input_features = input_features * 5
-
-# 		self.linear1 = nn.Linear(input_features, output_features)
-# 		self.activation = nn.GELU()
-# 		self.linear2 = nn.Linear(output_features, output_features)
-# 		self.ln1 = nn.Identity() if not ln1 else nn.LayerNorm(input_features)
-# 		self.pos_emb = None if not pos_emb else nn.Parameter(torch.zeros(num_image_tokens, input_features))
-
-# 		# Mode token
-# 		self.mode_token = nn.Embedding(n_modes, output_features)
-# 		self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
-	
-# 	def forward(self, vision_outputs: torch.Tensor, mode: torch.Tensor):
-# 		if self.deep_extract:
-# 			x = torch.concat((
-# 				vision_outputs[-2],
-# 				vision_outputs[3],
-# 				vision_outputs[7],
-# 				vision_outputs[13],
-# 				vision_outputs[20],
-# 			), dim=-1)
-# 			assert len(x.shape) == 3, f"Expected 3, got {len(x.shape)}"  # batch, tokens, features
-# 			assert x.shape[-1] == vision_outputs[-2].shape[-1] * 5, f"Expected {vision_outputs[-2].shape[-1] * 5}, got {x.shape[-1]}"
-# 		else:
-# 			x = vision_outputs[-2]
-
-# 		x = self.ln1(x)
-
-# 		if self.pos_emb is not None:
-# 			assert x.shape[-2:] == self.pos_emb.shape, f"Expected {self.pos_emb.shape}, got {x.shape[-2:]}"
-# 			x = x + self.pos_emb
-
-# 		x = self.linear1(x)
-# 		x = self.activation(x)
-# 		x = self.linear2(x)
-
-# 		# Mode token
-# 		mode_token = self.mode_token(mode)
-# 		assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
-# 		x = torch.cat((x, mode_token), dim=1)
-
-# 		return x
 
 
 def load_vlm_model(model_path: Path):
@@ -329,101 +279,69 @@ def run_vlm_model(prompt_str: str, tokenizer, text_model, clip_processor, clip_m
 @app.route('/predict', methods=['POST'])
 def predict():
 	"""Predict tags for an image."""
-	data = request.get_json()
-	image_hash = bytes.fromhex(data['hash'])
-	
-	# Check if image exists
-	image_path = IMAGE_DIR / f'{image_hash.hex()[:2]}' / f'{image_hash.hex()[2:4]}' / f'{image_hash.hex()}'
-	print(image_path)
-	if not image_path.exists():
-		return 'Image does not exist', 404
-	
-	# Load image
-	image = Image.open(image_path)
-
-	logging.info(f'Queueing prediction for {image_hash.hex()}')
-	future = executor.submit(prediction_worker, ImageJob(image_hash, image))
-	result = future.result()
-	if result is None:
+	try:
+		file = request.files.get('image')
+		if file is None:
+			return 'No image provided', 400
+		image = Image.open(file.stream)
+		image.load()
+		future = executor.submit(tag_prediction_worker, TagPredictionJob(image))
+		result = future.result()
+		if result is None:
+			return 'Prediction failed', 500
+		
+		return result
+	except Exception as e:
+		logging.error(f'Prediction failed: {e}')
 		return 'Prediction failed', 500
-	
-	logging.info(f'Predicted for {image_hash.hex()}, got result')
-
-	return result
 
 
 @app.route('/tag_assoc', methods=['POST'])
 def tag_assoc():
 	"""Predict tags based on the given tags."""
-	data = request.get_json()
-	tags = data['tags']
-	image_hash = bytes.fromhex(data['hash']) if 'hash' in data else None
-	image = None
-
-	if not isinstance(tags, list):
-		return 'Tags must be a list', 400
-	
-	if not all(isinstance(tag, str) for tag in tags):
-		return 'Tags must be a list of strings', 400
-	
-	# Check if image exists
-	if image_hash is not None:
-		image_path = IMAGE_DIR / f'{image_hash.hex()[:2]}' / f'{image_hash.hex()[2:4]}' / f'{image_hash.hex()}'
-		if not image_path.exists():
-			return 'Image does not exist', 404
-	
-		# Load image
-		image = Image.open(image_path)
-
-	if image is not None and image_hash is not None:
-		logging.info(f'Queueing image/tag association prediction for {tags} and {image_hash.hex()}')
-		future = executor.submit(tag_image_assoc_worker, TagImageAssocJob(tags, image_hash, image))
-	else:
-		logging.info(f'Queueing tag association prediction for {tags}')
-		future = executor.submit(tag_assoc_worker, TagAssocJob(tags))
-	
-	result = future.result()
-	if result is None:
+	try:
+		tags = request.form.getlist('tags')
+		file = request.files.get('image')
+		if file is None:
+			future = executor.submit(tag_assoc_worker, TagAssocJob(tags))
+		else:
+			data = file.stream.read()
+			image = Image.open(io.BytesIO(data))
+			image.load()
+			image_hash = sha256(data).digest()
+			future = executor.submit(tag_image_assoc_worker, TagImageAssocJob(tags, image, image_hash))
+		
+		result = future.result()
+		if result is None:
+			return 'Prediction failed', 500
+		
+		return result
+	except Exception as e:
+		logging.error(f'Prediction failed: {e}')
 		return 'Prediction failed', 500
-	
-	logging.info(f'Predicted tag associations for {tags}, got result')
-
-	return result
 
 
 @app.route('/caption', methods=['POST'])
 def caption():
 	"""Generate a caption for an image using the VLM model."""
-	data = request.get_json()
-
-	# Image hash
-	image_hash = bytes.fromhex(data['hash'])
-
-	# Caption type
-	prompt = data.get('prompt', None)
-	if prompt is None or not isinstance(prompt, str):
-		return 'Prompt must be a string', 400
-	if len(prompt) > 256:
-		return 'Prompt is too long', 400
-
-	# Check if image exists
-	image_path = IMAGE_DIR / f'{image_hash.hex()[:2]}' / f'{image_hash.hex()[2:4]}' / f'{image_hash.hex()}'
-	print(image_path)
-	if not image_path.exists():
-		return 'Image does not exist', 404
-	
-	# Load image
-	image = Image.open(image_path)
-
-	logging.info(f'Queueing caption prediction for {image_hash.hex()}')
-	future = executor.submit(captioning_worker, ImageCaptioningJob(image_hash=image_hash, image=image, prompt=prompt))
-	result = future.result()
-	if result is None:
+	try:
+		prompt = request.form.get('prompt')
+		if prompt is None:
+			return 'No prompt provided', 400
+		file = request.files.get('image')
+		if file is None:
+			return 'No image provided', 400
+		image = Image.open(file.stream)
+		image.load()
+		future = executor.submit(captioning_worker, ImageCaptioningJob(image, prompt))
+		result = future.result()
+		if result is None:
+			return 'Prediction failed', 500
+		
+		return result
+	except Exception as e:
+		logging.error(f'Prediction failed: {e}')
 		return 'Prediction failed', 500
-	
-	logging.info(f'Predicted caption for {image_hash.hex()}, got result')
-
-	return result
 
 
 def prediction_worker_init(model_path: Path, tag_assoc_model_path: Path):
@@ -457,7 +375,7 @@ def prepare_image(image: Image.Image) -> torch.Tensor:
 	pad_left = (max_dim - image_shape[0]) // 2
 	pad_top = (max_dim - image_shape[1]) // 2
 
-	padded_image = Image.new('RGB', (max_dim, max_dim), (255, 255, 255))
+	padded_image = Image.new('RGB', (max_dim, max_dim), (255, 255, 255)) # type: ignore
 	padded_image.paste(image, (pad_left, pad_top))
 
 	# Resize image
@@ -475,26 +393,22 @@ def prepare_image(image: Image.Image) -> torch.Tensor:
 
 @torch.no_grad()
 def captioning_worker(job: ImageCaptioningJob):
-	image_hash = job.image_hash.hex()
 	image = job.image
-	logging.info(f'Generating caption for {image_hash}')
 
 	try:
-		caption = run_vlm_model(job.prompt, *thread_local.vlm_model, image)
+		tokenizer, text_model, clip_processor, clip_model, image_adapter = thread_local.vlm_model
+		caption = run_vlm_model(job.prompt, tokenizer, text_model, clip_processor, clip_model, image_adapter, image)
 	except Exception as e:
-		logging.error(f'Captioning failed for {image_hash}: {e}')
+		logging.error(f'Captioning failed: {e}')
 		return None
 	
-	logging.info(f'Generated caption for {image_hash}')
 	return {'caption': caption}
 
 
 @torch.no_grad()
-def prediction_worker(job: ImageJob):
+def tag_prediction_worker(job: TagPredictionJob) -> dict[str, float] | None:
 	model = thread_local.model
-	image_hash = job.image_hash.hex()
 	image = job.image
-	logging.info(f'Predicting for {image_hash}')
 
 	try:
 		image_tensor = prepare_image(image)
@@ -506,13 +420,12 @@ def prediction_worker(job: ImageJob):
 		with torch.amp.autocast_mode.autocast('cuda', enabled=True):
 			preds = model(batch)
 	except Exception as e:
-		logging.error(f'Prediction failed for {image_hash}: {e}')
+		logging.error(f'Tag prediction failed: {e}')
 		return None
 
 	tags = preds['tags'][0].sigmoid().cpu().tolist()
 	result = {tag: prob for tag, prob in zip(thread_local.top_tags, tags)}
 
-	logging.info(f'Predicted for {image_hash}')
 	return result
 
 

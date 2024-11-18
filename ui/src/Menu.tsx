@@ -105,7 +105,7 @@ function Menu() {
 	return (
 		<div className="menu">
 			<div className="menu-item logo">
-				<img src="/icon.svg" alt="Website Logo" />
+				<img src="/icon2.svg" alt="Website Logo" />
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={onDownloadClicked}>

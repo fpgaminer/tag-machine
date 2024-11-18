@@ -7,7 +7,6 @@ import { HashResponse } from "./tag-storm-db-types/hash-response";
 import { ImageResponse } from "./tag-storm-db-types/image-response";
 
 export const API_URL = "/api";
-const PREDICTION_API_URL = "/prediction";
 
 export interface ApiTag {
 	id: number;
@@ -51,7 +50,7 @@ export interface ApiLoginResponse {
 
 export type SearchSelect = "id" | "hash" | "tags" | "attributes";
 
-export async function authenticatedFetch(input: RequestInfo, init?: RequestInit): Promise<Response> {
+export async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const user_token = authState.user_token;
 
 	if (user_token === null) {
@@ -237,37 +236,10 @@ export async function untagImage(image: number | string, tag: string): Promise<v
 }
 
 export async function getTagSuggestions(hash: string): Promise<Map<string, number>> {
-	const response = await authenticatedFetch(`${PREDICTION_API_URL}/predict`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash: hash,
-		}),
-	});
+	const response = await authenticatedFetch(`${API_URL}/images/${hash}/predict/tags`);
 
 	if (!response.ok) {
-		throw response;
-	}
-
-	const jsonObject = (await response.json()) as ApiTagSuggestions;
-	return new Map(Object.entries(jsonObject));
-}
-
-export async function getTagAssociations(tags: string[]): Promise<Map<string, number>> {
-	const response = await authenticatedFetch(`${PREDICTION_API_URL}/tag_assoc`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			tags: tags,
-		}),
-	});
-
-	if (!response.ok) {
-		throw new Error(`Failed to get tag associations: ${response.status}`);
+		throw new Error(`Failed to get tag suggestions: ${response.status}: ${await response.text()}`);
 	}
 
 	const jsonObject = (await response.json()) as ApiTagSuggestions;
@@ -275,19 +247,12 @@ export async function getTagAssociations(tags: string[]): Promise<Map<string, nu
 }
 
 export async function getTagImageAssociations(tags: string[], hash: string): Promise<Map<string, number>> {
-	const response = await authenticatedFetch(`${PREDICTION_API_URL}/tag_assoc`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			tags: tags,
-			hash: hash,
-		}),
-	});
+	const tag_string = tags.join(",");
+	const params = new URLSearchParams({ tags: tag_string });
+	const response = await authenticatedFetch(`${API_URL}/images/${hash}/predict/tags?${params.toString()}`);
 
 	if (!response.ok) {
-		throw response;
+		throw new Error(`Failed to get tag image associations: ${response.status}: ${await response.text()}`);
 	}
 
 	const jsonObject = (await response.json()) as ApiTagSuggestions;
@@ -295,19 +260,11 @@ export async function getTagImageAssociations(tags: string[], hash: string): Pro
 }
 
 export async function getImageCaptionSuggestion(hash: string, prompt: string): Promise<string> {
-	const response = await authenticatedFetch(`${PREDICTION_API_URL}/caption`, {
-		method: "POST",
-		headers: {
-			"Content-Type": "application/json",
-		},
-		body: JSON.stringify({
-			hash: hash,
-			prompt: prompt,
-		}),
-	});
+	const params = new URLSearchParams({ prompt });
+	const response = await authenticatedFetch(`${API_URL}/images/${hash}/predict/caption?${params.toString()}`);
 
 	if (!response.ok) {
-		throw new Error(`Failed to get caption suggestion: ${response.status}`);
+		throw new Error(`Failed to get caption suggestion: ${response.status}: ${await response.text()}`);
 	}
 
 	const jsonObject = (await response.json()) as ApiCaptionSuggestion;
