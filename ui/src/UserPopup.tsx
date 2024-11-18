@@ -126,6 +126,8 @@ function UserPopup() {
 
 		setNewPassword("");
 		setConfirmPassword("");
+
+		await asyncAlert("Password changed successfully");
 	}
 
 	async function createNewUserToken() {
@@ -214,5 +216,12 @@ async function asyncConfirm(message: string): Promise<boolean> {
 		} else {
 			resolve(false);
 		}
+	});
+}
+
+async function asyncAlert(message: string): Promise<void> {
+	return new Promise((resolve) => {
+		window.alert(message);
+		resolve();
 	});
 }

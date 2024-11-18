@@ -1,8 +1,2 @@
-/target
-config.toml
 /images
-.env
 /uploads
-.sqlx
-/tag_*.json
-/tag_*.txt
