@@ -1,7 +1,7 @@
 import { autorun, computed, makeAutoObservable, makeObservable, reaction, runInAction } from "mobx";
 import * as api from "./api";
 import { imageListState } from "./state/ImageList";
-import { tagListState, TagListStateStatus } from "./state/TagList";
+import { tagListState } from "./state/TagList";
 import { currentImageState } from "./state/CurrentImage";
 import { scryptAsync } from "@noble/hashes/scrypt";
 import { authState, checkIfLoggedIn } from "./state/Auth";
@@ -14,7 +14,6 @@ export class ImageObject {
 	tags: Map<number, number>;
 	attributes: Map<string, Map<string, number>>;
 	active: boolean;
-	caption: string | null;
 
 	constructor(
 		id: number,
@@ -22,14 +21,12 @@ export class ImageObject {
 		tags: Map<number, number>,
 		attributes: Map<string, Map<string, number>>,
 		active: boolean,
-		caption: string | null
 	) {
 		this.id = id;
 		this.hash = hash;
 		this.tags = tags;
 		this.attributes = attributes;
 		this.active = active;
-		this.caption = caption;
 		makeAutoObservable(this);
 	}
 
@@ -70,7 +67,6 @@ export class ImageObject {
 			this.attributes.set(key, new Map(Object.entries(value)));
 		}
 		this.active = other.active;
-		this.caption = other.caption;
 	}
 
 	get trainingPrompt(): string | null {
@@ -93,6 +89,18 @@ export class ImageObject {
 	get flatTags(): number[] {
 		return Array.from(this.tags.keys());
 	}
+
+	singularAttribute(key: string): string | null {
+		const values = this.attributes.get(key);
+
+		if (values === undefined || values.size !== 1) {
+			return null;
+		}
+
+		const value = Array.from(values.keys())[0];
+
+		return value;
+	}
 }
 
 export class Tag {
@@ -105,7 +113,6 @@ export class Tag {
 		this.name = name;
 		this.active = active;
 
-		//makeAutoObservable(this);
 		makeObservable(this, {
 			favorite: computed,
 		});
@@ -151,6 +158,7 @@ export enum WindowStates {
 	Captioning = "captioning",
 	Vqa = "vqa",
 	Register = "register",
+	VqaTasks = "vqa-tasks",
 }
 
 class WindowState {
@@ -172,10 +180,11 @@ class WindowState {
 		const lastWindowState = localStorage.getItem("lastWindowState");
 
 		if (lastWindowState !== null) {
-			const newState = Object.values(WindowStates).includes(lastWindowState as WindowStates) ? lastWindowState as WindowStates : WindowStates.Tagging;
+			const newState = Object.values(WindowStates).includes(lastWindowState as WindowStates)
+				? (lastWindowState as WindowStates)
+				: WindowStates.Tagging;
 			this.state = newState;
-		}
-		else {
+		} else {
 			this.state = WindowStates.Tagging;
 		}
 	}
@@ -319,31 +328,38 @@ export const imageHashToUrl = (hash: string) => {
 	return `${api.API_URL}/images/${hash}`;
 };
 
-export async function addImageAttribute(image: ImageObject, key: string, value: string, singular: boolean) {
-	const existing = image.flatAttributes.get(key) ?? null;
+export const imageIdToUrl = (id: number) => {
+	return `${api.API_URL}/images/${id}`;
+};
+
+export async function addImageAttribute(imageId: number, key: string, value: string, singular: boolean) {
+	const image = imageListState.getImageById(imageId);
 	const userId = authState.userInfo?.id;
 
+	if (image === null) {
+		console.warn(`Image ${imageId} not found in image list`);
+		return;
+	}
+
 	if (userId === null || userId === undefined) {
-		throw Error("Not logged in");
-	}
-
-	if (existing !== null && singular && existing.length == 1 && existing[0] === value) {
-		// No change
+		console.warn(`Not logged in, can't add attribute to image ${imageId}`);
 		return;
 	}
 
-	if (existing !== null && !singular && existing.includes(value)) {
-		// No change
-		return;
-	}
-
+	// Make the API call
 	try {
-		await api.addImageAttribute(image.hash, key, value, singular);
+		await api.addImageAttribute(imageId, key, value, singular);
 	} catch (error) {
-		errorMessageState.setErrorMessage(`Error setting attribute: ${error as string}`);
+		// Conflict means the attribute already exists; ignore
+		if (error instanceof api.HttpError && error.statusCode === 409) {
+			return;
+		}
+
+		errorMessageState.setErrorMessage(`${error as string}`);
 		return;
 	}
 
+	// Update the image in our state
 	runInAction(() => {
 		if (singular) {
 			image.attributes.set(key, new Map([[value, userId]]));
@@ -386,17 +402,7 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 
 	const impliedTags = Array.from(tagImplications.get(tag.name) ?? [])
 		.map((impliedTag) => tagListState.getTagByName(impliedTag))
-		.filter((impliedTag) => impliedTag !== null) as Tag[];
-
-	const imageTagObjects = Array.from(imageTags.keys()).map((tagId) => {
-		const tagObject = tagIdToTag.get(tagId);
-
-		if (tagObject === undefined) {
-			throw Error("Tag list is inconsistent");
-		}
-
-		return tagObject;
-	});
+		.filter((impliedTag) => impliedTag !== null);
 
 	if (addTag) {
 		// Also add implied tags
@@ -406,34 +412,12 @@ export async function toggleImageTag(image: ImageObject, tag: Tag) {
 			}
 		}
 	}
-	/* else {
-		// Also remove implied tags
-		const tagsToRemove = new Set<Tag>(impliedTags.filter((impliedTag) => imageTags.has(impliedTag.id)));
-
-		// But only remove implied tags that won't be supported by other tags on the image
-		for (const imageTag of imageTagObjects) {
-			if (imageTag === tag) {
-				continue;
-			}
-
-			for (const impliedTag of tagImplications.get(imageTag.name) ?? []) {
-				const impliedTagObject = tagListState.getTagByName(impliedTag);
-
-				if (impliedTagObject !== null && imageTags.has(impliedTagObject.id)) {
-					// This tag is implied by another tag on the image, so don't remove it
-					tagsToRemove.delete(impliedTagObject);
-				}
-			}
-		}
-
-		tagsToAddOrRemove.push(...Array.from(tagsToRemove));
-	}*/
 
 	const tagsToAddOrRemoveStr = tagsToAddOrRemove.map((tag) => tag.name).join(", ");
 
 	console.log(
 		`Toggling tag ${tag.name} on image ${image.hash}: ${addTag ? "add" : "remove"}; tags to add/remove:`,
-		tagsToAddOrRemoveStr
+		tagsToAddOrRemoveStr,
 	);
 
 	if (addTag) {
@@ -487,14 +471,11 @@ autorun(() => {
 		const image = imageListState.getImageByIndexClamped(i);
 
 		if (image !== null && user_token !== null) {
-			fetch(imageHashToUrl(image.hash), {
+			void fetch(imageHashToUrl(image.hash), {
 				headers: {
-				  'Authorization': `Bearer ${user_token}`
-				}
-			})
-			.then(response => response.blob());
-			//const elem = new Image();
-			//elem.src = imageHashToUrl(image.hash);
+					Authorization: `Bearer ${user_token}`,
+				},
+			}).then((response) => response.blob());
 		}
 	}
 });
@@ -573,9 +554,11 @@ export async function initState() {
 export async function login_key_from_password(username: string, password: string): Promise<string> {
 	// Scrypt the password
 	const login_key = await scryptAsync(password, username, { N: 2 ** 16, r: 8, p: 1, dkLen: 32 });
-	
+
 	// Hex encode the login key
-	const login_key_hex = Array.from(login_key).map(byte => byte.toString(16).padStart(2, '0')).join('');
+	const login_key_hex = Array.from(login_key)
+		.map((byte) => byte.toString(16).padStart(2, "0"))
+		.join("");
 
 	return login_key_hex;
 }
@@ -586,8 +569,7 @@ export async function login(username: string, password: string | null, key: stri
 
 	if (login_key === null && password !== null) {
 		login_key = await login_key_from_password(username, password);
-	}
-	else if (login_key === null) {
+	} else if (login_key === null) {
 		throw Error("No password or key provided");
 	}
 
@@ -598,14 +580,15 @@ export async function login(username: string, password: string | null, key: stri
 
 // Automatically switch to login screen if not logged in, or away from login screen if logged in
 autorun(() => {
-	const url_hash = window.location.hash;
-
 	if (authState.loggedIn === true && (windowState.state === WindowStates.Login || windowState.state === null)) {
 		runInAction(() => {
 			windowState.restoreWindowState();
 		});
-	}
-	else if (authState.loggedIn === false && windowState.state !== WindowStates.Login && windowState.state !== WindowStates.Register) {
+	} else if (
+		authState.loggedIn === false &&
+		windowState.state !== WindowStates.Login &&
+		windowState.state !== WindowStates.Register
+	) {
 		runInAction(() => {
 			windowState.setWindowState(WindowStates.Login);
 		});
@@ -631,15 +614,15 @@ reaction(
 	() => authState.loggedIn,
 	(loggedIn) => {
 		if (loggedIn === true) {
-			tagListState.fetchTagList();
+			void tagListState.fetchTagList();
 		}
 
 		if (loggedIn === true) {
 			runInAction(() => {
-				imageListState.performSearch().then(() => {
+				void imageListState.performSearch().then(() => {
 					imageListState.setInitialSearchPerformed();
 				});
 			});
 		}
-	}
-)
+	},
+);

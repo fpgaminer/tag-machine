@@ -2,7 +2,6 @@ import { makeAutoObservable, runInAction } from "mobx";
 import { ImageObject, errorMessageState } from "../state";
 import * as api from "../api";
 import { currentImageState } from "./CurrentImage";
-import { SearchResultResponse } from "../tag-storm-db-types/search-result-response";
 
 const MAX_SEARCH_HISTORY = 10;
 
@@ -136,10 +135,9 @@ class ImageListState {
 					Object.entries(image.attributes).map(([outerKey, innerObj]) => [
 						outerKey,
 						new Map<string, number>(Object.entries(innerObj).map(([key, value]) => [key, value])),
-					])
+					]),
 				),
 				image.active,
-				image.caption
 			);
 			this.imagesById.set(image.id, obj);
 			this.imagesByHash.set(image.hash, obj);
@@ -173,16 +171,6 @@ class ImageListState {
 		});
 	}
 
-	/*getSearchIndexByHash(image_hash: string): number | null {
-		const index = this.searchList.findIndex((image) => image.hash === image_hash);
-
-		if (index === -1) {
-			return null;
-		}
-
-		return index;
-	}*/
-
 	getSearchIndexById(image_id: number): number | null {
 		const index = this.searchList?.indexOf(image_id);
 
@@ -210,7 +198,9 @@ class ImageListState {
 	}
 
 	getImageByIndexClamped(index: number): ImageObject | null {
-		return this.searchList === null ? null : this.getImageByIndex(Math.min(Math.max(0, index), this.searchList.length - 1));
+		return this.searchList === null
+			? null
+			: this.getImageByIndex(Math.min(Math.max(0, index), this.searchList.length - 1));
 	}
 
 	getImageIdByIndexClamped(index: number): number | null {

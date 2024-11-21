@@ -52,7 +52,8 @@ autorun(
 		} catch (error) {
 			console.log("Error fetching tag associations:", error);
 			// Check if it's a 502 error
-			if (error instanceof Response && error.status === 502) {
+			if (error instanceof api.HttpError && error.statusCode === 502) {
+				console.log("Eating error");
 				// If it is, don't show an error message
 				runInAction(() => {
 					tagAssociationState.setServerDown(true);
@@ -84,5 +85,5 @@ autorun(
 			tagAssociationState.setServerDown(false);
 		});
 	},
-	{ delay: 1000 }
+	{ delay: 1000 },
 );

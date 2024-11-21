@@ -4,7 +4,7 @@ import { errorMessageState } from "../state";
 
 class AuthState {
 	user_token: string | null = null;
-	loggedIn: boolean | null = null;   // Null if we don't know yet
+	loggedIn: boolean | null = null; // Null if we don't know yet
 	userInfo: api.ApiUserInfo | null = null;
 
 	constructor() {
@@ -25,7 +25,7 @@ class AuthState {
 		this.user_token = token;
 		localStorage.setItem("user_token", token);
 
-		checkIfLoggedIn();
+		void checkIfLoggedIn();
 	}
 
 	setLoggedIn(loggedIn: boolean) {
@@ -56,9 +56,8 @@ export async function checkIfLoggedIn() {
 		if (user_info !== null) {
 			authState.setUserInfo(user_info);
 		}
-	}
-	catch (error) {
+	} catch (error) {
 		authState.setLoggedIn(false);
-		errorMessageState.setErrorMessage(`Error checking if logged in: ${error}`);
+		errorMessageState.setErrorMessage(`Error checking if logged in: ${String(error)}`);
 	}
 }

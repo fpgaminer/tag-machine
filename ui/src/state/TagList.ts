@@ -32,7 +32,7 @@ class TagListState {
 			errorMessageState.setErrorMessage(`Error fetching tag list: ${error as string}, will retry in 5 seconds`);
 
 			// Retry after a delay
-			new Promise((resolve) => setTimeout(resolve, 5000));
+			void new Promise((resolve) => setTimeout(resolve, 5000));
 
 			return;
 		}
@@ -45,14 +45,14 @@ class TagListState {
 			errorMessageState.setErrorMessage(`Error fetching tag mappings: ${error as string}, will retry in 5 seconds`);
 
 			// Retry after a delay
-			new Promise((resolve) => setTimeout(resolve, 5000));
-			
+			void new Promise((resolve) => setTimeout(resolve, 5000));
+
 			return;
 		}
 
 		const aliases = new Map<string, string>(Object.entries(mappingData.aliases));
 		const implications = new Map<string, Set<string>>(
-			Object.entries(mappingData.implications).map(([key, value]) => [key, new Set<string>(value)])
+			Object.entries(mappingData.implications).map(([key, value]) => [key, new Set<string>(value)]),
 		);
 		const blacklist = new Set<string>(mappingData.blacklist);
 		const deprecations = new Set<string>(mappingData.deprecations);

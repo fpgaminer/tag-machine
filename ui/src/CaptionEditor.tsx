@@ -3,10 +3,10 @@ import { currentImageState } from "./state/CurrentImage";
 import React, { useEffect, useState } from "react";
 import { autorun } from "mobx";
 import { addImageAttribute, suggestCaption } from "./state";
-import { AutoTokenizer } from '@xenova/transformers';
-import { tokenizeString, useWorker } from "./Llama3TokenizerProxy";
+import { AutoTokenizer } from "@xenova/transformers";
+import { tokenizeString } from "./Llama3TokenizerProxy";
 
-const tokenizer = await AutoTokenizer.from_pretrained('openai/clip-vit-large-patch14');
+const tokenizer = await AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14");
 
 enum CaptionMode {
 	StandardCaption = "StandardCaption",
@@ -23,14 +23,18 @@ enum SaveButtonState {
 	Saved = 2,
 }
 
-const CAPTION_TYPE_MAP: { 
-	[key: string]: string[] 
+const CAPTION_TYPE_MAP: {
+	[key: string]: string[];
 } = {
 	"descriptive,formal,false,false": ["Write a descriptive caption for this image in a formal tone."],
-	"descriptive,formal,false,true": ["Write a descriptive caption for this image in a formal tone within {word_count} words."],
+	"descriptive,formal,false,true": [
+		"Write a descriptive caption for this image in a formal tone within {word_count} words.",
+	],
 	"descriptive,formal,true,false": ["Write a {length} descriptive caption for this image in a formal tone."],
 	"descriptive,informal,false,false": ["Write a descriptive caption for this image in a casual tone."],
-	"descriptive,informal,false,true": ["Write a descriptive caption for this image in a casual tone within {word_count} words."],
+	"descriptive,informal,false,true": [
+		"Write a descriptive caption for this image in a casual tone within {word_count} words.",
+	],
 	"descriptive,informal,true,false": ["Write a {length} descriptive caption for this image in a casual tone."],
 
 	"training_prompt,formal,false,false": ["Write a stable diffusion prompt for this image."],
@@ -39,13 +43,13 @@ const CAPTION_TYPE_MAP: {
 
 	"rng-tags,formal,false,false": ["Write a list of Booru tags for this image."],
 	"rng-tags,formal,false,true": ["Write a list of Booru tags for this image within {word_count} words."],
-	"rng-tags,formal,true,false": ["Write a {length} list of Booru tags for this image."]
+	"rng-tags,formal,true,false": ["Write a {length} list of Booru tags for this image."],
 };
 
 function CaptionEditor() {
 	// The current image and its captions (according to the server)
 	const image = currentImageState.image;
-	const imageCaption = image ? image.caption : null;
+	const imageCaption = image ? image.singularAttribute("caption") : null;
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
 	const [captionTone, setCaptionTone] = useState<CaptionTone>("formal");
 	const [captionLength, setCaptionLength] = useState<CaptionLength>(null);
@@ -61,7 +65,7 @@ function CaptionEditor() {
 	const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
 
 	// User edits are saved temporarily to localStorage, fetch it if it exists
-	const localStorageCaption = (image !== null) ? getLocalStorageCaption(image.id, captionMode) : null;
+	const localStorageCaption = image !== null ? getLocalStorageCaption(image.id, captionMode) : null;
 
 	// If the user has unsaved edits, use that as the caption text
 	const revertCaptionText = localStorageCaption ?? currentText ?? "";
@@ -89,7 +93,7 @@ function CaptionEditor() {
 			}
 		};
 
-		fetchTokens();
+		void fetchTokens();
 	}, [localCaption]);
 
 	// Update the caption when the current image changes
@@ -97,15 +101,15 @@ function CaptionEditor() {
 		() =>
 			autorun(() => {
 				const image = currentImageState.image;
-				const imageCaption = image ? image.caption : null;
+				const imageCaption = image ? image.singularAttribute("caption") : null;
 				const imageTrainingPrompt = image ? image.trainingPrompt : null;
 				const currentText = captionMode === CaptionMode.StandardCaption ? imageCaption : imageTrainingPrompt;
-				const localStorageCaption = (image !== null) ? getLocalStorageCaption(image.id, captionMode) : null;
+				const localStorageCaption = image !== null ? getLocalStorageCaption(image.id, captionMode) : null;
 				const revertCaptionText = localStorageCaption ?? currentText ?? "";
 
 				setLocalCaption(revertCaptionText);
 			}),
-		[captionMode]
+		[captionMode],
 	);
 
 	async function onSaveClicked() {
@@ -119,10 +123,9 @@ function CaptionEditor() {
 
 		// Save the caption to the server
 		if (captionMode === CaptionMode.StandardCaption) {
-			await addImageAttribute(image, "caption", localCaption, true);
-		}
-		else if (captionMode === CaptionMode.TrainingPrompt) {
-			await addImageAttribute(image, "training_prompt", localCaption, true);
+			await addImageAttribute(image.id, "caption", localCaption, true);
+		} else if (captionMode === CaptionMode.TrainingPrompt) {
+			await addImageAttribute(image.id, "training_prompt", localCaption, true);
 		}
 
 		// Set state to saved and clear after a delay
@@ -168,8 +171,7 @@ function CaptionEditor() {
 		if (image !== null) {
 			if (event.target.value === currentText) {
 				clearLocalStorageCaption(image.id, captionMode);
-			}
-			else {
+			} else {
 				saveLocalStorageCaption(image.id, captionMode, event.target.value);
 			}
 		}
@@ -192,7 +194,7 @@ function CaptionEditor() {
 
 	function onCaptionLengthChange(event: React.ChangeEvent<HTMLSelectElement>) {
 		const value = event.target.value;
-		if (value === '') {
+		if (value === "") {
 			setCaptionLength(null);
 		} else if (!isNaN(Number(value))) {
 			setCaptionLength(Number(value));
@@ -205,14 +207,11 @@ function CaptionEditor() {
 
 	if (saving === SaveButtonState.Idle && isUnsaved) {
 		saveButtonText = "Save";
-	}
-	else if (saving === SaveButtonState.Idle) {
+	} else if (saving === SaveButtonState.Idle) {
 		saveButtonText = "Unchanged";
-	}
-	else if (saving === SaveButtonState.Saving) {
+	} else if (saving === SaveButtonState.Saving) {
 		saveButtonText = "Saving...";
-	}
-	else if (saving === SaveButtonState.Saved) {
+	} else if (saving === SaveButtonState.Saved) {
 		saveButtonText = "Saved";
 	}
 
@@ -227,21 +226,27 @@ function CaptionEditor() {
 					</select>
 
 					{/* Caption Tone Dropdown */}
-					<select value={captionTone} onChange={onCaptionToneChange} disabled={captionMode !== CaptionMode.StandardCaption}>
+					<select
+						value={captionTone}
+						onChange={onCaptionToneChange}
+						disabled={captionMode !== CaptionMode.StandardCaption}
+					>
 						<option value="formal">Formal</option>
 						{captionMode === CaptionMode.StandardCaption && <option value="informal">Informal</option>}
 					</select>
 
 					{/* Caption Length Dropdown */}
-					<select value={captionLength ?? ''} onChange={onCaptionLengthChange}>
-						<option value=''>Any length</option>
+					<select value={captionLength ?? ""} onChange={onCaptionLengthChange}>
+						<option value="">Any length</option>
 						<option value="very short">Very short</option>
 						<option value="short">Short</option>
 						<option value="medium-length">Medium-length</option>
 						<option value="long">Long</option>
 						<option value="very long">Very long</option>
 						{Array.from({ length: 25 }, (_, i) => 20 + i * 10).map((num) => (
-							<option key={num} value={num}>{num} words</option>
+							<option key={num} value={num}>
+								{num} words
+							</option>
 						))}
 					</select>
 
@@ -252,7 +257,9 @@ function CaptionEditor() {
 			</div>
 			<div className="remainingSpace captionEditor">
 				<textarea value={localCaption} onChange={onCaptionChange} />
-				<div className="tokenCount">{tokens.length} tokens, {clip_tokens.length} clip tokens</div>
+				<div className="tokenCount">
+					{tokens.length} tokens, {clip_tokens.length} clip tokens
+				</div>
 			</div>
 		</div>
 	);
@@ -264,8 +271,10 @@ function getSavedCaptionMode(): CaptionMode {
 	if (savedMode === null) {
 		return CaptionMode.StandardCaption;
 	}
-	
-	return Object.values(CaptionMode).includes(savedMode as CaptionMode) ? savedMode as CaptionMode : CaptionMode.StandardCaption;
+
+	return Object.values(CaptionMode).includes(savedMode as CaptionMode)
+		? (savedMode as CaptionMode)
+		: CaptionMode.StandardCaption;
 }
 
 function clearLocalStorageCaption(imageId: number, captionMode: CaptionMode) {
@@ -290,7 +299,7 @@ function formatString(template: string, values: { [key: string]: string }): stri
 }
 
 function formatCaptionPrompt(captionType: string, captionTone: string, captionLength: string | number | null): string {
-	const promptKey = `${captionType},${captionTone},${typeof captionLength === 'string' ? "true" : "false"},${typeof captionLength === 'number' ? "true" : "false"}`;
+	const promptKey = `${captionType},${captionTone},${typeof captionLength === "string" ? "true" : "false"},${typeof captionLength === "number" ? "true" : "false"}`;
 
 	if (!(promptKey in CAPTION_TYPE_MAP)) {
 		throw new Error(`Invalid caption prompt key: ${promptKey}`);

@@ -1,6 +1,14 @@
 import { observer } from "mobx-react";
 import WikiPopup from "./WikiPopup";
-import { WindowStates, adminPanelPopupState, imageInfoPopupState, uploadPopupState, userSettingsPopupState, wikiPopupState, windowState } from "./state";
+import {
+	WindowStates,
+	adminPanelPopupState,
+	imageInfoPopupState,
+	uploadPopupState,
+	userSettingsPopupState,
+	wikiPopupState,
+	windowState,
+} from "./state";
 import ErrorMessage from "./ErrorMessage";
 import Menu from "./Menu";
 import ImageInfoPopup from "./ImageInfoPopup";
@@ -12,6 +20,7 @@ import VQAMode from "./VQAMode";
 import RegisterWindow from "./RegisterWindow";
 import UserPopup from "./UserPopup";
 import AdminPopup from "./AdminPopup";
+import VQATaskMode from "./VQATaskMode";
 
 function App() {
 	const wikiPopupVisible = wikiPopupState.visible;
@@ -35,7 +44,7 @@ function App() {
 					<ErrorMessage />
 				</div>
 				<div className="row contentBased">
-					{(windowStateState !== WindowStates.Login && windowStateState !== WindowStates.Register) ? <Menu /> : null}
+					{windowStateState !== WindowStates.Login && windowStateState !== WindowStates.Register ? <Menu /> : null}
 				</div>
 				<div className="row remainingSpace spacing-5">
 					{windowStateState === WindowStates.Login ? <LoginWindow /> : null}
@@ -43,6 +52,7 @@ function App() {
 					{windowStateState === WindowStates.Captioning ? <CaptionMode /> : null}
 					{windowStateState === WindowStates.Vqa ? <VQAMode /> : null}
 					{windowStateState === WindowStates.Register ? <RegisterWindow /> : null}
+					{windowStateState === WindowStates.VqaTasks ? <VQATaskMode /> : null}
 				</div>
 			</div>
 		</div>

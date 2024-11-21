@@ -48,7 +48,30 @@ export interface ApiLoginResponse {
 	token: string;
 }
 
+export interface ApiTask {
+	id: number;
+	group: string;
+	data: string;
+	status: TaskStatus;
+	modified_time: number;
+	blame: number;
+}
+
 export type SearchSelect = "id" | "hash" | "tags" | "attributes";
+export type TaskStatus = "waiting" | "in_progress" | "done";
+
+export class HttpError extends Error {
+	statusCode: number;
+
+	constructor(statusCode: number, message: string) {
+		super(message);
+		this.statusCode = statusCode;
+	}
+
+	toString(): string {
+		return `${this.message}`;
+	}
+}
 
 export async function authenticatedFetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
 	const user_token = authState.user_token;
@@ -63,8 +86,7 @@ export async function authenticatedFetch(input: RequestInfo | URL, init?: Reques
 
 	if (init.headers === undefined) {
 		init.headers = new Headers();
-	}
-	else {
+	} else {
 		init.headers = new Headers(init.headers);
 	}
 
@@ -187,22 +209,33 @@ export async function removeImage(identifier: number | string): Promise<void> {
 	return;
 }
 
-export async function addImageAttribute(image: number | string, key: string, value: string, singular: boolean): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}/${singular}`, {
-		method: "POST",
-	});
+export async function addImageAttribute(
+	image: number | string,
+	key: string,
+	value: string,
+	singular: boolean,
+): Promise<void> {
+	const response = await authenticatedFetch(
+		`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}/${singular}`,
+		{
+			method: "POST",
+		},
+	);
 
 	if (!response.ok) {
-		throw new Error(`Failed to add image attribute: ${response.status}: ${await response.text()}`);
+		throw new HttpError(response.status, `Failed to add image attribute: ${response.status}: ${await response.text()}`);
 	}
 
 	return;
 }
 
 export async function removeImageAttribute(image: number | string, key: string, value: string): Promise<void> {
-	const response = await authenticatedFetch(`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}`, {
-		method: "DELETE",
-	});
+	const response = await authenticatedFetch(
+		`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}`,
+		{
+			method: "DELETE",
+		},
+	);
 
 	if (!response.ok) {
 		throw new Error(`Failed to remove image attribute: ${response.status}: ${await response.text()}`);
@@ -239,7 +272,7 @@ export async function getTagSuggestions(hash: string): Promise<Map<string, numbe
 	const response = await authenticatedFetch(`${API_URL}/images/${hash}/predict/tags`);
 
 	if (!response.ok) {
-		throw new Error(`Failed to get tag suggestions: ${response.status}: ${await response.text()}`);
+		throw new HttpError(response.status, await response.text());
 	}
 
 	const jsonObject = (await response.json()) as ApiTagSuggestions;
@@ -252,7 +285,8 @@ export async function getTagImageAssociations(tags: string[], hash: string): Pro
 	const response = await authenticatedFetch(`${API_URL}/images/${hash}/predict/tags?${params.toString()}`);
 
 	if (!response.ok) {
-		throw new Error(`Failed to get tag image associations: ${response.status}: ${await response.text()}`);
+		console.log("Throwing error");
+		throw new HttpError(response.status, await response.text());
 	}
 
 	const jsonObject = (await response.json()) as ApiTagSuggestions;
@@ -331,7 +365,13 @@ export async function userInfo(userId: number | string): Promise<ApiUserInfo | n
 	return (await response.json()) as ApiUserInfo;
 }
 
-export async function createUser(username: string, login_key: string, cf_turnstile_token: string, birthdate: number, invite_code: string): Promise<void> {
+export async function createUser(
+	username: string,
+	login_key: string,
+	cf_turnstile_token: string,
+	birthdate: number,
+	invite_code: string,
+): Promise<void> {
 	const response = await fetch(`${API_URL}/users`, {
 		method: "POST",
 		headers: {
@@ -411,7 +451,7 @@ export async function getCfTurnstileKey(): Promise<string> {
 		throw new Error(`Failed to get Cloudflare Turnstile key: ${response.status}: ${await response.text()}`);
 	}
 
-	return (await response.text());
+	return await response.text();
 }
 
 export async function listUsers(): Promise<ApiUserInfo[]> {
@@ -437,6 +477,90 @@ export async function changeUserScopes(userId: number, scopes: string): Promise<
 
 	if (!response.ok) {
 		throw new Error(`Failed to change user scopes: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
+}
+
+export async function createTask(group: string, data: object, status: TaskStatus): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/task-queue`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			group,
+			data,
+			status,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to create task: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
+}
+
+export async function deleteTask(taskId: number): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/task-queue/${taskId}`, {
+		method: "DELETE",
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to delete task: ${response.status}: ${await response.text()}`);
+	}
+
+	return;
+}
+
+export async function listTasks(group: string | null): Promise<ApiTask[]> {
+	const params = new URLSearchParams();
+	if (group !== null) {
+		params.set("group", group);
+	}
+	const response = await authenticatedFetch(`${API_URL}/task-queue?${params.toString()}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to list tasks: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.json()) as ApiTask[];
+}
+
+export async function countTasks(group: string | null): Promise<Record<TaskStatus, number>> {
+	const params = new URLSearchParams({ count: "true" });
+	if (group !== null) {
+		params.set("group", group);
+	}
+	const response = await authenticatedFetch(`${API_URL}/task-queue?${params.toString()}`);
+
+	if (!response.ok) {
+		throw new Error(`Failed to count tasks: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.json()) as Record<TaskStatus, number>;
+}
+
+export async function acquireTask(group: string): Promise<ApiTask | null> {
+	const response = await authenticatedFetch(`${API_URL}/task-queue/${group}/acquire`, {
+		method: "POST",
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to acquire task: ${response.status}: ${await response.text()}`);
+	}
+
+	return (await response.json()) as ApiTask;
+}
+
+export async function finishTask(taskId: number): Promise<void> {
+	const response = await authenticatedFetch(`${API_URL}/task-queue/${taskId}/finish`, {
+		method: "POST",
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to finish task: ${response.status}: ${await response.text()}`);
 	}
 
 	return;

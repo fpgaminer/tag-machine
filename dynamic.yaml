@@ -7,13 +7,6 @@ http:
       middlewares:
         - strip-api-prefix
 
-    # HTTP Router for Prediction
-    prediction-router:
-      rule: "PathPrefix(`/prediction`)"
-      service: prediction-service
-      middlewares:
-        - strip-prediction-prefix
-
     # HTTP Router for Web Dev
     web-router:
       rule: "PathPrefix(`/`)"
@@ -24,13 +17,8 @@ http:
     api-service:
       loadBalancer:
         servers:
-          - url: "http://rust-api:8086"
-
-    # Service for Prediction Server
-    prediction-service:
-      loadBalancer:
-        servers:
-          - url: "http://prediction-server:8087"
+          - url: "http://host.docker.internal:8186"
+          #- url: "http://rust-api:8086"
 
     # Service for Web Dev
     web-service:
@@ -50,9 +38,3 @@ http:
       stripPrefix:
         prefixes:
           - "/api"
-
-    # Middleware to strip /prediction prefix
-    strip-prediction-prefix:
-      stripPrefix:
-        prefixes:
-          - "/prediction"

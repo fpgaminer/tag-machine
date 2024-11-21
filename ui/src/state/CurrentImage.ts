@@ -2,9 +2,11 @@ import { makeAutoObservable, runInAction } from "mobx";
 import { ImageObject, Tag, TagSuggestion, errorMessageState, fetchTagSuggestions } from "../state";
 import { imageListState } from "./ImageList";
 import { tagListState } from "./TagList";
+import * as api from "../api";
 
 export class CurrentImageState {
 	private _imageId: number | null = null;
+	private _displayedImageId: number | null = null;
 	suggestedTags: TagSuggestion[] | null = null;
 	suggestedTagsInFlight = false;
 	serverDown: boolean = false;
@@ -16,7 +18,15 @@ export class CurrentImageState {
 	get imageId(): number | null {
 		return this._imageId;
 	}
-	
+
+	get displayedImageId(): number | null {
+		return this._displayedImageId;
+	}
+
+	set displayedImageId(image_id: number | null) {
+		this._displayedImageId = image_id;
+	}
+
 	set imageId(image_id: number | null) {
 		const imageChanged = this._imageId != image_id;
 
@@ -64,14 +74,14 @@ export class CurrentImageState {
 			result = await fetchTagSuggestions(currentImage);
 		} catch (error) {
 			// Check if it's a 502 error
-			if (error instanceof Response && error.status === 502) {
+			if (error instanceof api.HttpError && error.statusCode === 502) {
 				// If it is, don't show an error message
 				runInAction(() => {
 					this.serverDown = true;
 				});
 				return;
 			}
-			
+
 			errorMessageState.setErrorMessage(`Error fetching tag suggestions: ${error as string}`);
 			return;
 		}
@@ -104,6 +114,14 @@ export class CurrentImageState {
 		}
 
 		return imageListState.getImageById(this.imageId);
+	}
+
+	get displayedImage(): ImageObject | null {
+		if (this.displayedImageId === null) {
+			return null;
+		}
+
+		return imageListState.getImageById(this.displayedImageId);
 	}
 
 	get tagMap(): Map<string, Tag> | null {
@@ -170,7 +188,6 @@ export class CurrentImageState {
 	async nextUntaggedImage() {
 		let inx = this.searchIndex ?? 0;
 
-		// eslint-disable-next-line no-constant-condition
 		while (true) {
 			inx += 1;
 

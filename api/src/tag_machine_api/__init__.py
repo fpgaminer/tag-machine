@@ -3,42 +3,37 @@ from typing import Generator
 import requests
 from pydantic import BaseModel
 import logging
+import numpy as np
+import dataclasses
+
+from tag_machine_api.TagStormDb.AttributeWithBlame import AttributeWithBlame
+from tag_machine_api.TagStormDb.HashResponse import HashResponse
+from tag_machine_api.TagStormDb.IDResponse import IDResponse
+from tag_machine_api.TagStormDb.ImageResponse import ImageResponse
+from tag_machine_api.TagStormDb.ResponseType import ResponseType
+from tag_machine_api.TagStormDb.SearchResultResponse import SearchResultResponse
+from tag_machine_api.TagStormDb.Image import Image as ApiImage
+from tag_machine_api.TagStormDb.TagWithBlame import TagWithBlame
 
 
 API_URL = 'http://localhost:1420'
 
 
-class DBImage(BaseModel):
+@dataclasses.dataclass(frozen=True)
+class DBImage:
 	id: int
 	hash: str
 	active: bool
-	tags: set[str]
-	attributes: dict[str, set[str]]
-	tags_blame: dict[str, int] | None   # tag -> user_id
-	caption: str | None
+	tags: dict[str, int]  # tag -> user_id
+	attributes: dict[str, dict[str, int]]  # key -> {value -> user_id}
 
-	def add_tag(self, api: 'TagMachineAPI', tag: str):
-		api.tag_image(bytes.fromhex(self.hash), tag)
-		self.tags.add(tag)
-	
-	def remove_tag(self, api: 'TagMachineAPI', tag: str):
-		api.untag_image(bytes.fromhex(self.hash), tag)
-		self.tags.remove(tag)
-	
-	def add_attribute(self, api: 'TagMachineAPI', key: str, value: str, singular: bool):
-		api.add_image_attribute(bytes.fromhex(self.hash), key, value, singular)
-		if key not in self.attributes:
-			self.attributes[key] = set()
-		
-		if singular:
-			self.attributes[key] = {value}
-		else:
-			self.attributes[key].add(value)
-	
-	def remove_attribute(self, api: 'TagMachineAPI', key: str, value: str):
-		api.remove_image_attribute(bytes.fromhex(self.hash), key, value)
-		if key in self.attributes:
-			self.attributes[key].remove(value)
+
+@dataclasses.dataclass(frozen=True)
+class SearchResultImage:
+	id: int | None
+	hash: bytes | None
+	tags: dict[str, int] | None
+	attributes: dict[str, dict[str, int]] | None
 
 
 class DBTag(BaseModel):
@@ -59,157 +54,184 @@ class DBLog(BaseModel):
 
 
 class TagMachineAPI:
-	def __init__(self, username: str, login_key: bytes | str, url: str = API_URL):
-		if isinstance(login_key, bytes):
-			login_key = login_key.hex()
+	def __init__(self, token: bytes | str, url: str = API_URL):
+		if isinstance(token, bytes):
+			token = token.hex()
 
 		self.session = requests.Session()
 		self.url = url
 
-		# Login
-		response = requests.post(self.url + '/api/login', json={'username': username, 'login_key': login_key})
-		response.raise_for_status()
-		user_token = response.json()
-		assert isinstance(user_token, str)
-		self.user_token = user_token
-
 		# Set default headers
-		self.session.headers['Authorization'] = f'Bearer {self.user_token}'
+		self.session.headers['Authorization'] = f'Bearer {token}'
 	
-	def get_image_by_hash(self, image_hash: bytes) -> DBImage:
+	def get_image_metadata(self, id: bytes | int) -> DBImage:
 		"""
-		Get an image's metadata by its hash.
+		Get an image's metadata.
 		"""
-		r = self.session.get(f'{self.url}/api/image_by_hash/{image_hash.hex()}')
+		if isinstance(id, bytes):
+			id_str = id.hex()
+		else:
+			id_str = str(id)
+		r = self.session.get(f'{self.url}/api/images/{id_str}/metadata')
 		r.raise_for_status()
 		metadata = r.json()
-		return DBImage(tags_blame=None, **metadata)
+		return DBImage(**metadata)
 	
-	def get_image_by_id(self, image_id: int) -> DBImage:
+	def read_image(self, id: bytes | int) -> bytes:
 		"""
-		Get an image's metadata by its id.
+		Read an image's data.
 		"""
-		r = self.session.get(f'{self.url}/api/image_by_id/{image_id}')
-		r.raise_for_status()
-		metadata = r.json()
-		return DBImage(tags_blame=None, **metadata)
-	
-	def read_image_by_hash(self, image_hash: bytes) -> bytes:
-		"""
-		Read an image by its hash.
-		"""
-		r = self.session.get(f'{self.url}/api/images/{image_hash.hex()}')
+		id_str = id.hex() if isinstance(id, bytes) else str(id)
+		r = self.session.get(f'{self.url}/api/images/{id_str}')
 		r.raise_for_status()
 		return r.content
-
-	def read_image_by_id(self, image_id: int) -> bytes:
-		"""
-		Read an image by its id.
-		"""
-		r = self.session.get(f'{self.url}/api/images_by_id/{image_id}')
-		r.raise_for_status()
-		return r.content
-
 	
-	def tag_image(self, image_hash: bytes, tag: str):
+	def tag_image(self, id: bytes | int, tag: str | int):
 		"""
 		Add a tag to an image.
 		"""
-		data = {
-			'hash': image_hash.hex(),
-			'tag': tag,
-		}
-		r = self.session.post(f'{self.url}/api/tag_image', json=data)
+		id_str = id.hex() if isinstance(id, bytes) else str(id)
+		r = self.session.post(f'{self.url}/api/images/{id_str}/tags/{tag}')
 		r.raise_for_status()
 	
-	def untag_image(self, image_hash: bytes, tag: str):
+	def untag_image(self, id: bytes | int, tag: str | int):
 		"""
 		Remove a tag from an image.
 		"""
-		data = {
-			'hash': image_hash.hex(),
-			'tag': tag,
-		}
-		r = self.session.post(f'{self.url}/api/untag_image', json=data)
+		id_str = id.hex() if isinstance(id, bytes) else str(id)
+		r = self.session.delete(f'{self.url}/api/images/{id_str}/tags/{tag}')
 		r.raise_for_status()
 	
-	def add_image_attribute(self, image_hash: bytes, key: str, value: str, singular: bool) -> bool:
+	def add_image_attribute(self, id: bytes | int, key: str | int, value: str, singular: bool) -> bool:
 		"""
 		Add an attribute to an image. Returns False if the attribute already exists.
 		"""
-		data = {
-			'hash': image_hash.hex(),
-			'key': key,
-			'value': value,
-			'singular': singular,
-		}
-		r = self.session.post(f'{self.url}/api/add_image_attribute', json=data)
+		id_str = id.hex() if isinstance(id, bytes) else str(id)
+		singular_str = 'true' if singular else 'false'
+		r = self.session.post(f'{self.url}/api/images/{id_str}/attributes/{key}/{value}/{singular_str}')
 		if r.status_code == 409:
 			return False
 		r.raise_for_status()
 		return True
 
-	def remove_image_attribute(self, image_hash: bytes, key: str, value: str):
+	def remove_image_attribute(self, id: bytes | int, key: str | int, value: str):
 		"""
 		Remove an attribute from an image.
 		"""
-		data = {
-			'hash': image_hash.hex(),
-			'key': key,
-			'value': value,
-		}
-		r = self.session.post(f'{self.url}/api/remove_image_attribute', json=data)
+		id_str = id.hex() if isinstance(id, bytes) else str(id)
+		r = self.session.delete(f'{self.url}/api/images/{id_str}/attributes/{key}/{value}')
 		r.raise_for_status()
 	
-	def fetch_logs(self, image_hash: bytes | None = None, action: str | None = None) -> list[DBLog]:
-		params = {
-			'min_id': 0,
-			'limit': 1000000,
-			'image_hash': image_hash.hex() if image_hash is not None else None,
-			'action': action,
-		}
+	# def fetch_logs(self, image_hash: bytes | None = None, action: str | None = None) -> list[DBLog]:
+	# 	params = {
+	# 		'min_id': 0,
+	# 		'limit': 1000000,
+	# 		'image_hash': image_hash.hex() if image_hash is not None else None,
+	# 		'action': action,
+	# 	}
 
-		logs = []
+	# 	logs = []
 
-		while True:
-			response = self.session.get(f'{self.url}/api/logs', params=params)
-			response.raise_for_status()
-			response_json = response.json()
-			new_logs = [DBLog(**log) for log in response_json]
-			if len(new_logs) == 0:
-				break
+	# 	while True:
+	# 		response = self.session.get(f'{self.url}/api/logs', params=params)
+	# 		response.raise_for_status()
+	# 		response_json = response.json()
+	# 		new_logs = [DBLog(**log) for log in response_json]
+	# 		if len(new_logs) == 0:
+	# 			break
 
-			logs.extend(new_logs)
-			params['min_id'] = new_logs[-1].id + 1
+	# 		logs.extend(new_logs)
+	# 		params['min_id'] = new_logs[-1].id + 1
 	
-		return logs
+	# 	return logs
 	
-	def search(self, operator: dict, order_by: str, select: list[str], limit: int | None) -> list | dict:
+	def search(self, query: str, select: list[str]) -> np.ndarray | list[bytes] | list[SearchResultImage]:
 		"""
 		Search images in the database.
 		"""
 		params = {
-			'order_by': order_by,
-			'operator': operator,
-			'limit': limit,
-			'select': select,
+			'select': ','.join(select),
+			'query': query,
 		}
-		r = self.session.post(f'{self.url}/api/search_images', json=params)
-		r.raise_for_status()
-		return r.json()
+		r = self.session.get(f'{self.url}/api/search/images', params=params)
+		if r.status_code != 200:
+			raise Exception(f'Failed to search images ({r.status_code}): {r.text}')
+
+		result = r.content
+		return parse_search_response(SearchResultResponse.GetRootAs(result, 0))
 	
 	def add_image(self, image_hash: bytes) -> bool:
 		"""
 		Add an image to the database. Returns False if the image already exists.
 		"""
-		data = {
-			'hash': image_hash.hex(),
-		}
-		r = self.session.post(f'{self.url}/api/add_image', json=data)
+		r = self.session.post(f'{self.url}/api/images/{image_hash.hex()}')
 		if r.status_code == 409:
 			return False
 		r.raise_for_status()
 		return True
+
+
+def parse_search_response(response: SearchResultResponse) -> np.ndarray | list[bytes] | list[SearchResultImage]:
+	data = response.Data()
+	assert data is not None
+	response_type = response.DataType()
+
+	# Don't handle other response types yet
+	if response_type == ResponseType.IDResponse:
+		result = IDResponse()
+		result.Init(data.Bytes, data.Pos)
+		result = result.IdsAsNumpy()
+		assert isinstance(result, np.ndarray)
+		return result
+	elif response_type == ResponseType.HashResponse:
+		result = HashResponse()
+		result.Init(data.Bytes, data.Pos)
+		hash_tables = (result.Hashes(i)._tab for i in range(result.HashesLength())) # type: ignore
+		hashes = [hash.Bytes[hash.Pos:hash.Pos+32] for hash in hash_tables]
+		return hashes
+	elif response_type == ResponseType.ImageResponse:
+		result = ImageResponse()
+		result.Init(data.Bytes, data.Pos)
+		images = []
+		for i in range(result.ImagesLength()):
+			image = result.Images(i)
+			assert isinstance(image, ApiImage)
+			id = image.Id()
+			hash = image.Hash()
+			if hash is not None:
+				hash = hash._tab
+				hash = hash.Bytes[hash.Pos:hash.Pos+32]
+			tags: dict[str, int] | None = None
+			if not image.TagsIsNone():
+				tags = {}
+				for i in range(image.TagsLength()):
+					tag = image.Tags(i)
+					assert isinstance(tag, TagWithBlame)
+					k = tag.Tag()
+					v = tag.Blame()
+					assert isinstance(k, str), f'Expected str, got {type(k)}'
+					assert isinstance(v, int), f'Expected int, got {type(v)}'
+					tags[k] = v					
+
+			attributes = None
+			if not image.AttributesIsNone():
+				attributes = {}
+				for i in range(image.AttributesLength()):
+					attr = image.Attributes(i)
+					assert isinstance(attr, AttributeWithBlame)
+					key = attr.Key().decode('utf-8')
+					value = attr.Value().decode('utf-8')
+					blame = attr.Blame()
+					if key not in attributes:
+						attributes[key] = {}
+					attributes[key][value] = blame
+			
+			images.append(SearchResultImage(id=id, hash=hash, tags=tags, attributes=attributes))
+		
+		return images
+	else:
+		raise NotImplementedError(f'Unknown response type: {response_type}')
+
 
 
 class DatabaseData:

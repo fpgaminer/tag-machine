@@ -15,7 +15,6 @@ import {
 	windowState,
 	WindowStates,
 	imageResolutionState,
-	imageHashToUrl,
 	userSettingsPopupState,
 	adminPanelPopupState,
 } from "./state";
@@ -25,7 +24,7 @@ import { API_URL, authenticatedFetch } from "./api";
 function Menu() {
 	const currentSearchText = useObserver(() => imageListState.currentSearch);
 	const [searchText, setSearchText] = React.useState(currentSearchText);
-	const currentImage = useObserver(() => currentImageState.image);
+	const currentImage = useObserver(() => currentImageState.displayedImage);
 	const currentMode = useObserver(() => windowState.state);
 	const currentModeValue = currentMode ?? WindowStates.Tagging;
 	const currentImageResolution = useObserver(() => imageResolutionState.resolution);
@@ -124,6 +123,7 @@ function Menu() {
 					<option value={WindowStates.Tagging}>Tagging Mode</option>
 					<option value={WindowStates.Captioning}>Captioning Mode</option>
 					<option value={WindowStates.Vqa}>VQA Mode</option>
+					<option value={WindowStates.VqaTasks}>VQA Task Mode</option>
 				</select>
 			</div>
 			<div className="menu-item">

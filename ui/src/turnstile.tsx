@@ -1,3 +1,4 @@
+/// <reference types="cloudflare-turnstile" />
 import React, { useEffect, useRef } from "react";
 import useScript from "react-script-hook";
 
@@ -11,17 +12,11 @@ interface TurnstileProps {
 
 declare global {
 	interface Window {
-		turnstile?: any;
+		turnstile?: Turnstile.Turnstile;
 	}
 }
 
-const Turnstile: React.FC<TurnstileProps> = ({
-	siteKey,
-	onSuccess,
-	onError,
-	action,
-	cData,
-}) => {
+const Turnstile: React.FC<TurnstileProps> = ({ siteKey, onSuccess, onError, action, cData }) => {
 	const ref = useRef<HTMLDivElement>(null);
 	const widgetIdRef = useRef<string | null>(null);
 
@@ -33,7 +28,9 @@ const Turnstile: React.FC<TurnstileProps> = ({
 	useEffect(() => {
 		if (error) {
 			console.error("Failed to load Turnstile:", error);
-			onError && onError();
+			if (onError) {
+				onError();
+			}
 			return;
 		}
 
@@ -41,14 +38,14 @@ const Turnstile: React.FC<TurnstileProps> = ({
 			widgetIdRef.current = window.turnstile.render(ref.current, {
 				sitekey: siteKey,
 				callback: onSuccess,
-				'error-callback': onError,
+				"error-callback": onError,
 				action,
 				cData,
-			});
+			}) as string;
 		}
 
 		return () => {
-			if (widgetIdRef.current !== null) {
+			if (widgetIdRef.current !== null && window.turnstile) {
 				window.turnstile.remove(widgetIdRef.current);
 				widgetIdRef.current = null;
 			}

@@ -1,22 +1,31 @@
 import { observer } from "mobx-react";
 import ActiveTagList from "./ActiveTagList";
-import ImageControls from "./ImageControls";
 import ImageDisplay from "./ImageDisplay";
 import VQAEditor from "./VQAEditor";
 import { useEffect, useRef, useState } from "react";
-import { currentImageState } from "./state/CurrentImage";
+import * as api from "./api";
+import TaskControls from "./TaskControls";
 import { imageListState } from "./state/ImageList";
 import { imageResolutionState } from "./state";
 
-function VQAMode() {
+interface TaskData {
+	image_id: number;
+	noun_phrase: string;
+}
+
+interface CurrentTask {
+	task: api.ApiTask;
+	data: TaskData;
+}
+
+function VQATaskMode() {
 	const initialHeight = parseFloat(localStorage.getItem("layout-vqamode-height") ?? "50");
 	const [activeTagListHeight, setActiveTagListHeight] = useState(initialHeight);
 	const isResizing = useRef(false);
-	const currentImage = currentImageState.image;
-	const currentImageQA = currentImage === null ? null : currentImage.singularAttribute("questionAnswer");
-
-	const noImagesFound = imageListState.searchList !== null && imageListState.searchList.length == 0;
-	const message = noImagesFound ? "No images found" : null;
+	const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
+	const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
+	const currentImage = currentTask !== null ? imageListState.getImageById(currentTask.data.image_id) : null;
+	const currentImageQA = currentImage !== null ? currentImage.singularAttribute("questionAnswer") : null;
 
 	const onMouseDown = () => {
 		isResizing.current = true;
@@ -52,6 +61,53 @@ function VQAMode() {
 		};
 	});
 
+	async function fetchTaskCount() {
+		const taskCounts = await api.countTasks("vqa-needs-prompts");
+		setTaskCounts(taskCounts);
+	}
+
+	async function acquireTask() {
+		const task = await api.acquireTask("vqa-needs-prompts");
+
+		if (task === null) {
+			setCurrentTask(null);
+			return;
+		}
+
+		// Parse task data
+		const data = JSON.parse(task.data) as TaskData;
+
+		// Fetch the image into our cache
+		await imageListState.fetchImage(data.image_id);
+
+		// Set the current task
+		setCurrentTask({ task, data });
+
+		// Update task counts
+		void fetchTaskCount();
+	}
+
+	async function onFinishedClicked() {
+		if (currentTask === null) {
+			return;
+		}
+
+		await api.finishTask(currentTask.task.id);
+
+		setCurrentTask(null);
+		void acquireTask();
+	}
+
+	function onSkipClicked() {
+		setCurrentTask(null);
+		void acquireTask();
+	}
+
+	// Acquire a task on load
+	useEffect(() => {
+		void acquireTask();
+	}, []);
+
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	return (
@@ -61,11 +117,11 @@ function VQAMode() {
 					<ImageDisplay
 						imageId={currentImage !== null ? currentImage.id : null}
 						resolution={imageResolutionState.resolution}
-						message={message}
+						message={"No tasks left"}
 					/>
 				</div>
 				<div className="row contentBased">
-					<ImageControls />
+					<TaskControls taskCounts={taskCounts} onFinishedClicked={onFinishedClicked} onSkipClicked={onSkipClicked} />
 				</div>
 			</div>
 			<div className="column sideColumnLarge spacing-5">
@@ -74,11 +130,11 @@ function VQAMode() {
 				</div>
 				<div className="divider horizontal-divider" onMouseDown={onMouseDown} />
 				<div className="resizable-panel" style={{ flex: 1 }}>
-					{currentImage !== null ? <VQAEditor imageId={currentImage.id} imageQA={currentImageQA} /> : null}
+					{currentTask !== null ? <VQAEditor imageId={currentTask.data.image_id} imageQA={currentImageQA} /> : null}
 				</div>
 			</div>
 		</div>
 	);
 }
 
-export default observer(VQAMode);
+export default observer(VQATaskMode);

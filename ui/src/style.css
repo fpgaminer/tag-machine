@@ -839,6 +839,7 @@ li p {
     flex-direction: column;
     padding: 10px;
     gap: 10px;
+	box-sizing: border-box;
 }
 
 .vqaEditor textarea {
@@ -1275,4 +1276,102 @@ li p {
 	font-size: 0.7em;
 	padding: 5px;
 	margin: 0;
+}
+
+.task-controls {
+	display: flex;
+	flex-direction: row;
+	width: 100%;
+	padding: 5px;
+	color: #f0f0f0;
+}
+
+.task-wheel {
+	width: 50px;
+	height: 50px;
+}
+
+.task-wheel svg {
+	display: block;
+}
+
+.task-wheel .task-counts-tooltip {
+	display: none;
+	position: absolute;
+	top: 0px;
+	left: 50px;
+	background-color: #333;
+	color: #fff;
+	padding: 5px 10px;
+	border-radius: 5px;
+	white-space: nowrap;
+}
+
+.task-wheel:hover .task-counts-tooltip {
+	display: block;
+}
+
+.control-button {
+	background-color: #2980b9;
+	border: none;
+	border-radius: 5px;
+	color: #ffffff;
+	padding: 3px 20px;
+	cursor: pointer;
+	font-size: 0.9em;
+	font-weight: bold;
+	display: flex;
+	align-items: center;
+	transition: background-color 0.2s ease-in-out;
+}
+
+.control-button:hover {
+	background-color: #3498db;
+}
+
+.control-button:active {
+	transform: scale(0.98);
+}
+
+.task-progress-bar {
+	width: 200px;
+	height: 20px;
+	background-color: #ccc;
+	border-radius: 5px;
+	overflow: hidden;
+	position: relative;
+}
+
+.task-progress-segment {
+	height: 100%;
+	pointer-events: none;
+	top: 0;
+	left: 0;
+	position: absolute;
+}
+
+.task-progress-segment.done {
+	background-color: #2ecc71;
+}
+
+.task-progress-segment.waiting {
+	background-color: #f39c12;
+}
+
+.task-counts-tooltip {
+	color: #333;
+	padding: 0px 10px;
+	height: 100%;
+	white-space: nowrap;
+	font-size: 0.8em;
+	position: absolute;
+	right: 5px;
+	left: 5px;
+	display: flex;
+	align-items: center;
+	justify-content: flex-end;
+}
+
+.left-side {
+	flex-direction: row;
 }

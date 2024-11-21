@@ -1,22 +1,28 @@
 import { observer } from "mobx-react";
-import { errorMessageState, imageHashToUrl, imageResolutionState } from "./state";
-import { currentImageState } from "./state/CurrentImage";
+import { errorMessageState, imageIdToUrl } from "./state";
 import { TransformComponent, TransformWrapper } from "react-zoom-pan-pinch";
 import React, { useEffect, useState } from "react";
 import { authState } from "./state/Auth";
-import { imageListState } from "./state/ImageList";
+import { currentImageState } from "./state/CurrentImage";
 
-function ImageDisplay() {
+function ImageDisplay({
+	imageId,
+	resolution,
+	message,
+}: {
+	imageId: number | null;
+	resolution: number | null;
+	message: React.ReactNode | null;
+}) {
 	const [imageData, setImageData] = useState<string | null>(null);
-	const currentImage = currentImageState.image;
 	const userToken = authState.user_token;
 
 	useEffect(() => {
-		if (currentImage !== null && userToken !== null) {
-			let url = imageHashToUrl(currentImage.hash);
+		if (userToken !== null && imageId !== null) {
+			let url = imageIdToUrl(imageId);
 
-			if (imageResolutionState.resolution !== null) {
-				url += `?size=${imageResolutionState.resolution}`;
+			if (resolution !== null) {
+				url += `?size=${resolution}`;
 			}
 
 			fetch(url, {
@@ -38,26 +44,29 @@ function ImageDisplay() {
 				.catch((error) => {
 					errorMessageState.setErrorMessage(`Error fetching image: ${error}`);
 				});
+		} else {
+			setImageData(null);
 		}
-	}, [currentImage, userToken, imageResolutionState.resolution]);
+
+		currentImageState.displayedImageId = imageId;
+	}, [imageId, userToken, resolution]);
 
 	let contents = <p>Loading...</p>;
 
-	if (imageData !== null && currentImage !== null) {
+	if (imageData !== null) {
 		contents = (
 			<TransformWrapper initialScale={1} initialPositionX={0} initialPositionY={0} limitToBounds={true}>
 				{({ zoomIn, zoomOut, resetTransform, ...rest }) => (
 					<React.Fragment>
 						<TransformComponent>
-							<img src={imageData} alt={currentImage.hash} />
+							<img src={imageData} />
 						</TransformComponent>
 					</React.Fragment>
 				)}
 			</TransformWrapper>
 		);
-	} else if (currentImage === null && imageListState.searchList !== null && imageListState.searchList.length == 0) {
-		// Search results are loaded, but no image is selected
-		contents = <p>No images found</p>;
+	} else if (message !== null) {
+		contents = <p>{message}</p>;
 	}
 
 	return <div className="image-display">{contents}</div>;

@@ -1,8 +1,5 @@
-import { observer } from "mobx-react";
-import { currentImageState } from "./state/CurrentImage";
-import React, { useEffect, useState, useRef } from "react";
-import { autorun } from "mobx";
-import { addImageAttribute, imageHashToUrl, ImageObject } from "./state";
+import React, { useEffect, useState, useRef, useMemo } from "react";
+import { addImageAttribute, imageIdToUrl } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
@@ -12,69 +9,45 @@ interface QuestionAnswer {
 	answer: string;
 }
 
-function VQAEditor() {
-	const image = currentImageState.image;
-	const imageRawQA = image !== null ? image.flatAttributes.get("questionAnswer") ?? null : null;
-	const imageQA = imageRawQA !== null ? JSON.parse(imageRawQA[0]) as QuestionAnswer : null;
-	const [localQA, setLocalQA] = useState<QuestionAnswer>(imageQA ?? { question: "", answer: "" });
-	const localStorageCaption = (image !== null) ? getLocalStorageVQA(image.id) : null;
+function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | null }) {
+	const parsedQA = useMemo(() => (imageQA === null ? null : (JSON.parse(imageQA) as QuestionAnswer)), [imageQA]);
+	const [localQA, setLocalQA] = useState<QuestionAnswer>(parsedQA ?? { question: "", answer: "" });
+	const localStorageCaption = useMemo(() => getLocalStorageVQA(imageId), [imageId]);
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
 
 	// Update the question and answer when the image changes
-	useEffect(
-		() =>
-			autorun(() => {
-				if (image === null) {
-					return;
-				}
+	useEffect(() => {
+		setLocalQA(localStorageCaption ?? parsedQA ?? { question: "", answer: "" });
+	}, [parsedQA, localStorageCaption]);
 
-				setLocalQA(localStorageCaption ?? imageQA ?? { question: "", answer: "" });
-			}),
-		[image]
-	);
-
-	const isUnsaved = localQA.question !== imageQA?.question || localQA.answer !== imageQA?.answer;
+	const isUnsaved = localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer;
 
 	async function handleSave() {
-		if (image === null) {
-			console.error("No image selected, cannot save question and answer");
-			return;
-		}
-
-		await addImageAttribute(image, "questionAnswer", JSON.stringify(localQA), true);
+		await addImageAttribute(imageId, "questionAnswer", JSON.stringify(localQA), true);
 
 		// Clear the local storage
-		clearLocalStorageVQA(image.id);
+		clearLocalStorageVQA(imageId);
 	}
 
 	function onRevertClicked() {
 		// Revert to the server's version of the question and answer
-		setLocalQA(imageQA ?? { question: "", answer: "" });
-		clearLocalStorageVQA(image?.id ?? -1);
+		setLocalQA(parsedQA ?? { question: "", answer: "" });
+		clearLocalStorageVQA(imageId);
 	}
 
 	function onQuestionChanged(e: React.ChangeEvent<HTMLTextAreaElement>) {
-		setLocalQA({ ...localQA, question: e.target.value });
-		if (image !== null) {
-			saveLocalStorageVQA(image.id, { ...localQA, question: e.target.value });
-		}
+		setLocalQA((prevQA) => ({ ...prevQA, question: e.target.value }));
+		saveLocalStorageVQA(imageId, { ...localQA, question: e.target.value });
 	}
 
 	function onAnswerChanged(e: React.ChangeEvent<HTMLTextAreaElement>) {
-		setLocalQA({ ...localQA, answer: e.target.value });
-		if (image !== null) {
-			saveLocalStorageVQA(image.id, { ...localQA, answer: e.target.value });
-		}
+		setLocalQA((prevQA) => ({ ...prevQA, answer: e.target.value }));
+		saveLocalStorageVQA(imageId, { ...localQA, answer: e.target.value });
 	}
 
 	async function onGeminiClicked() {
-		if (image === null) {
-			console.error("No image selected, cannot run Gemini");
-			return;
-		}
-
-		let { systemInstruction, safetySettings } = await getGeminiSettings();
+		const { systemInstruction, safetySettings } = await getGeminiSettings();
 		if (systemInstruction === null || safetySettings === null) {
 			return;
 		}
@@ -82,7 +55,7 @@ function VQAEditor() {
 		console.log("Running Gemini with system instruction:", systemInstruction, "and safety settings:", safetySettings);
 
 		const question = localQA.question;
-		const response = await doGemini(systemInstruction, safetySettings, image, question, null);
+		const response = await doGemini(systemInstruction, safetySettings, imageId, question, null);
 		if (response === null) {
 			return;
 		}
@@ -91,11 +64,6 @@ function VQAEditor() {
 	}
 
 	async function onSuggestClicked() {
-		if (image === null) {
-			console.error("No image selected, cannot suggest prompts");
-			return;
-		}
-
 		let genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
 		if (genPrompt === null) {
 			genPrompt = await asyncPrompt("Enter gen prompt");
@@ -110,28 +78,42 @@ function VQAEditor() {
 			return;
 		}
 
-		console.log("Running Gemini with system instruction:", systemInstruction, "and safety settings:", safetySettings, "and gen prompt:", genPrompt);
+		console.log(
+			"Running Gemini with system instruction:",
+			systemInstruction,
+			"and safety settings:",
+			safetySettings,
+			"and gen prompt:",
+			genPrompt,
+		);
 
-		const response = await doGemini(systemInstruction, safetySettings, image, genPrompt, {
+		const response = await doGemini(systemInstruction, safetySettings, imageId, genPrompt, {
 			type: "object",
 			properties: {
 				prompts: {
-				type: "array",
-				items: {
-					type: "string"
-				}
-				}
+					type: "array",
+					items: {
+						type: "string",
+					},
+				},
 			},
-			required: [
-				"prompts"
-			]
+			required: ["prompts"],
 		});
 		if (response === null) {
 			return;
 		}
 
-		const jsonResponse = JSON.parse(response);
+		const jsonResponse = JSON.parse(response) as { prompts: string[] };
 		setSuggestedPrompts(jsonResponse.prompts);
+	}
+
+	async function onCustomClicked() {
+		const response = await doCustom(imageId, "");
+		if (response === null) {
+			return;
+		}
+
+		setLocalQA({ ...localQA, question: response });
 	}
 
 	function onPromptSelected(prompt: string) {
@@ -145,9 +127,12 @@ function VQAEditor() {
 			<div className="contentBased columnHeader">
 				<h3>Visual Q & A</h3>
 				<div className="columnHeaderButtons">
+					<button onClick={onCustomClicked}>Custom</button>
 					<button onClick={onSuggestClicked}>Suggest</button>
 					<button onClick={onGeminiClicked}>Run Gemini</button>
-					<button onClick={onRevertClicked} disabled={!isUnsaved}>Revert</button>
+					<button onClick={onRevertClicked} disabled={!isUnsaved}>
+						Revert
+					</button>
 					<SaveButton isUnsaved={isUnsaved} onSave={handleSave} />
 				</div>
 			</div>
@@ -164,11 +149,7 @@ function VQAEditor() {
 				</div>
 			)}
 			<div className="remainingSpace vqaEditor">
-				<textarea
-					placeholder="Enter your question"
-					value={localQA.question}
-					onChange={onQuestionChanged}
-				/>
+				<textarea placeholder="Enter your question" value={localQA.question} onChange={onQuestionChanged} />
 				<textarea
 					ref={answerTextareaRef}
 					placeholder="Enter the answer"
@@ -199,11 +180,10 @@ function getLocalStorageVQA(imageId: number): QuestionAnswer | null {
 	return JSON.parse(v) as QuestionAnswer;
 }
 
-export default observer(VQAEditor);
+export default VQAEditor;
 
-
-async function getImageAsBase64(image: ImageObject): Promise<{ base64: string, mimeType: string }> {
-	const response = await authenticatedFetch(imageHashToUrl(image.hash));
+async function getImageAsBase64(imageId: number): Promise<{ base64: string; mimeType: string }> {
+	const response = await authenticatedFetch(imageIdToUrl(imageId));
 	if (!response.ok) {
 		throw new Error(`Failed to fetch image: ${response.statusText}`);
 	}
@@ -222,7 +202,6 @@ async function getImageAsBase64(image: ImageObject): Promise<{ base64: string, m
 	});
 }
 
-
 function asyncPrompt(message: string): Promise<string | null> {
 	return new Promise((resolve) => {
 		const result = prompt(message);
@@ -230,8 +209,10 @@ function asyncPrompt(message: string): Promise<string | null> {
 	});
 }
 
-
-async function getGeminiSettings(): Promise<{ systemInstruction: string | null, safetySettings: SafetySetting[] | null }> {
+async function getGeminiSettings(): Promise<{
+	systemInstruction: string | null;
+	safetySettings: SafetySetting[] | null;
+}> {
 	let systemInstruction = localStorage.getItem("GEMINI_SYSTEM_INSTRUCTION");
 	if (systemInstruction === null) {
 		systemInstruction = await asyncPrompt("Enter system instruction");
@@ -255,8 +236,13 @@ async function getGeminiSettings(): Promise<{ systemInstruction: string | null, 
 	return { systemInstruction, safetySettings };
 }
 
-
-async function doGemini(systemInstruction: string, safetySettings: SafetySetting[], image: ImageObject, question: string, responseSchema: object | null): Promise<string | null> {
+async function doGemini(
+	systemInstruction: string,
+	safetySettings: SafetySetting[],
+	imageId: number,
+	question: string,
+	responseSchema: object | null,
+): Promise<string | null> {
 	try {
 		let apiKey = localStorage.getItem("GEMINI_API_KEY");
 		if (apiKey === null) {
@@ -280,14 +266,19 @@ async function doGemini(systemInstruction: string, safetySettings: SafetySetting
 			generationConfig.responseMimeType = "application/json";
 		}
 
-		const imageBase64 = await getImageAsBase64(image);
+		const imageBase64 = await getImageAsBase64(imageId);
 		const genAI = new GoogleGenerativeAI(apiKey);
-		const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro-002", safetySettings, generationConfig, systemInstruction });
+		const model = genAI.getGenerativeModel({
+			model: "gemini-1.5-pro-002",
+			safetySettings,
+			generationConfig,
+			systemInstruction,
+		});
 		const imageArg = {
 			inlineData: {
 				data: imageBase64.base64,
 				mimeType: imageBase64.mimeType,
-			}
+			},
 		};
 
 		const result = await model.generateContent([question, imageArg]);
@@ -295,6 +286,24 @@ async function doGemini(systemInstruction: string, safetySettings: SafetySetting
 		return result.response.text();
 	} catch (e) {
 		alert(`Error running Gemini: ${e}`);
+		return "";
+	}
+}
+
+async function doCustom(image_id: number, prompt: string): Promise<string | null> {
+	try {
+		const response = await fetch("http://127.0.0.1:5028/predict", {
+			method: "POST",
+			headers: {
+				"Content-Type": "application/json",
+			},
+			body: JSON.stringify({ prompt, image_id }),
+		});
+
+		const json = (await response.json()) as { output: string };
+		return json.output;
+	} catch (e) {
+		alert(`Error running custom model: ${e}`);
 		return "";
 	}
 }
