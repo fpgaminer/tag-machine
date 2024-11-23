@@ -1,8 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { addImageAttribute, imageIdToUrl } from "./state";
+import { addImageAttribute, errorMessageState, imageIdToUrl } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
+import { MultiModel, vqaAIConfigPopupState } from "./VQAAIConfigPopup";
 
 interface QuestionAnswer {
 	question: string;
@@ -15,6 +16,7 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	const localStorageCaption = useMemo(() => getLocalStorageVQA(imageId), [imageId]);
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
 
 	// Update the question and answer when the image changes
 	useEffect(() => {
@@ -46,31 +48,18 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 		saveLocalStorageVQA(imageId, { ...localQA, answer: e.target.value });
 	}
 
-	async function onGeminiClicked() {
-		const { systemInstruction, safetySettings } = await getGeminiSettings();
-		if (systemInstruction === null || safetySettings === null) {
-			return;
-		}
+	async function onSuggestAnswersClicked() {
+		const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
 
-		console.log("Running Gemini with system instruction:", systemInstruction, "and safety settings:", safetySettings);
-
-		const question = localQA.question;
-		const response = await doGemini(systemInstruction, safetySettings, imageId, question, null);
-		if (response === null) {
-			return;
-		}
-
-		setLocalQA({ ...localQA, answer: response });
+		const suggestions = await multiModelSuggestions(localQA.question, imageId, models);
+		setSuggestedAnswers(suggestions);
 	}
 
-	async function onSuggestClicked() {
-		let genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
+	async function onSuggestQuestionsClicked() {
+		const genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
 		if (genPrompt === null) {
-			genPrompt = await asyncPrompt("Enter gen prompt");
-			if (genPrompt === null) {
-				return;
-			}
-			localStorage.setItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT", genPrompt);
+			errorMessageState.setErrorMessage("Please set a prompt for generating VQA questions");
+			return;
 		}
 
 		const { systemInstruction, safetySettings } = await getGeminiSettings();
@@ -122,15 +111,37 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 		answerTextareaRef.current?.focus();
 	}
 
+	function onAnswerSelected(answer: string) {
+		setLocalQA({ ...localQA, answer });
+		setSuggestedAnswers(null);
+	}
+
+	function onAISettingsClicked() {
+		vqaAIConfigPopupState.setVisible(true);
+	}
+
 	return (
 		<div className="column remainingSpace">
 			<div className="contentBased columnHeader">
 				<h3>Visual Q & A</h3>
 				<div className="columnHeaderButtons">
-					<button onClick={onCustomClicked}>Custom</button>
-					<button onClick={onSuggestClicked}>Suggest</button>
-					<button onClick={onGeminiClicked}>Run Gemini</button>
-					<button onClick={onRevertClicked} disabled={!isUnsaved}>
+					<button onClick={onAISettingsClicked} title="Open AI Settings">
+						AI Settings
+					</button>
+					<button onClick={onCustomClicked} title="Ask the custom AI model for a suggested question">
+						Custom
+					</button>
+					<button onClick={onSuggestQuestionsClicked} title="Ask Gemini for a suggested question">
+						Suggest Qs
+					</button>
+					<button onClick={onSuggestAnswersClicked} title="Ask the list of AI models to suggest an answer">
+						Suggest As
+					</button>
+					<button
+						onClick={onRevertClicked}
+						disabled={!isUnsaved}
+						title="Revert to the server's version of the question and answer"
+					>
 						Revert
 					</button>
 					<SaveButton isUnsaved={isUnsaved} onSave={handleSave} />
@@ -143,6 +154,18 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 						{suggestedPrompts.map((prompt, index) => (
 							<li key={index} onClick={() => onPromptSelected(prompt)}>
 								{prompt}
+							</li>
+						))}
+					</ul>
+				</div>
+			)}
+			{suggestedAnswers && (
+				<div className="suggested-prompts">
+					<h4>Suggested Answers:</h4>
+					<ul>
+						{suggestedAnswers.map((answer, index) => (
+							<li key={index} onClick={() => onAnswerSelected(answer)}>
+								{answer}
 							</li>
 						))}
 					</ul>
@@ -197,7 +220,26 @@ async function getImageAsBase64(imageId: number): Promise<{ base64: string; mime
 			const base64data = reader.result?.toString().split(",")[1] ?? "";
 			resolve({ base64: base64data, mimeType });
 		};
-		reader.onerror = (err) => reject(err);
+		reader.onerror = (err: ProgressEvent<FileReader>) => reject(new Error(`Failed to read image: ${err.type}`));
+		reader.readAsDataURL(blob);
+	});
+}
+
+async function getImageAsDataUrl(imageId: number): Promise<string> {
+	const response = await authenticatedFetch(imageIdToUrl(imageId));
+	if (!response.ok) {
+		throw new Error(`Failed to fetch image: ${response.statusText}`);
+	}
+
+	const blob = await response.blob();
+
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+		reader.onloadend = () => {
+			const dataUrl = reader.result?.toString() ?? "";
+			resolve(dataUrl);
+		};
+		reader.onerror = (err: ProgressEvent<FileReader>) => reject(new Error(`Failed to read image: ${err.type}`));
 		reader.readAsDataURL(blob);
 	});
 }
@@ -285,7 +327,7 @@ async function doGemini(
 
 		return result.response.text();
 	} catch (e) {
-		alert(`Error running Gemini: ${e}`);
+		alert(`Error running Gemini: ${String(e)}`);
 		return "";
 	}
 }
@@ -303,7 +345,127 @@ async function doCustom(image_id: number, prompt: string): Promise<string | null
 		const json = (await response.json()) as { output: string };
 		return json.output;
 	} catch (e) {
-		alert(`Error running custom model: ${e}`);
+		alert(`Error running custom model: ${String(e)}`);
 		return "";
 	}
+}
+
+async function multiModelSuggestions(prompt: string, imageId: number, models: MultiModel[]): Promise<string[]> {
+	try {
+		// Get API key
+		let apiKey = localStorage.getItem("OPENROUTER_API_KEY");
+		if (apiKey === null) {
+			apiKey = await asyncPrompt("Enter API key");
+			if (apiKey === null) {
+				return [];
+			}
+			localStorage.setItem("OPENROUTER_API_KEY", apiKey);
+		}
+
+		// Get image
+		const dataUrl = await getImageAsDataUrl(imageId);
+
+		// Construct messages
+		const messages = [
+			{
+				role: "user",
+				content: [
+					{
+						type: "image_url",
+						image_url: dataUrl,
+					},
+					{
+						type: "text",
+						text: prompt,
+					},
+				],
+			},
+		];
+
+		// Get suggestions
+		const suggestions = await multiModelRequest(
+			apiKey,
+			"https://openrouter.ai/api/v1/chat/completions",
+			models,
+			messages,
+			1024,
+		);
+
+		return suggestions;
+	} catch (e) {
+		alert(`Error running multi-model suggestions: ${String(e)}`);
+		return [];
+	}
+}
+
+async function multiModelRequest(
+	api_key: string,
+	url: string,
+	models: MultiModel[],
+	messages: object[],
+	max_tokens: number,
+): Promise<string[]> {
+	const responses: Promise<string | null>[] = [];
+
+	for (const model of models) {
+		let model_messages = messages.slice();
+		if (model.systemMessage.trim() != "") {
+			model_messages = [
+				{
+					role: "system",
+					content: model.systemMessage.trim(),
+				},
+				...model_messages,
+			];
+		}
+
+		responses.push(
+			openAICompatRequest(api_key, url, model.model, model_messages, max_tokens)
+				.then((response) => response)
+				.catch((error) => {
+					console.error(`Error running model ${model.model}: ${error}`);
+					return null;
+				}),
+		);
+	}
+
+	const results = await Promise.all(responses);
+
+	return results.filter((result) => result !== null);
+}
+
+async function openAICompatRequest(
+	api_key: string,
+	url: string,
+	model: string,
+	messages: object[],
+	max_tokens: number,
+): Promise<string> {
+	const response = await fetch(url, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+			Authorization: `Bearer ${api_key}`,
+		},
+		body: JSON.stringify({
+			model,
+			messages,
+			max_tokens,
+		}),
+	});
+
+	interface Response {
+		choices: {
+			message: {
+				role: string;
+				content: string;
+			};
+		}[];
+	}
+
+	const json = (await response.json()) as Response;
+
+	const message = json.choices[0].message.content;
+
+	return message;
 }

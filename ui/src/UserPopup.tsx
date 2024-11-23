@@ -1,6 +1,6 @@
-import { errorMessageState, login_key_from_password, uploadPopupState, userSettingsPopupState } from "./state";
+import { errorMessageState, login_key_from_password, userSettingsPopupState } from "./state";
 import { observer } from "mobx-react";
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import * as api from "./api";
 import { userInfo } from "./api";
 import { authState } from "./state/Auth";
@@ -41,8 +41,8 @@ function UserPopup() {
 	}
 
 	useEffect(() => {
-		fetchUserInfo();
-		fetchUserTokens();
+		void fetchUserInfo();
+		void fetchUserTokens();
 	}, []);
 
 	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
@@ -68,7 +68,7 @@ function UserPopup() {
 			return;
 		}
 
-		if (!await asyncConfirm("Are you sure you want to invalidate the selected tokens?")) {
+		if (!(await asyncConfirm("Are you sure you want to invalidate the selected tokens?"))) {
 			return;
 		}
 
@@ -112,7 +112,7 @@ function UserPopup() {
 			return;
 		}
 
-		if (!await asyncConfirm("Are you sure you want to change your password?")) {
+		if (!(await asyncConfirm("Are you sure you want to change your password?"))) {
 			return;
 		}
 
@@ -143,7 +143,7 @@ function UserPopup() {
 
 	const tokenElements = tokens.map((token, index) => {
 		return (
-			<div key={index} className={`token-item ${token === activeToken ? 'active' : ''}`}>
+			<div key={index} className={`token-item ${token === activeToken ? "active" : ""}`}>
 				<input type="checkbox" checked={checkedTokens.has(token)} onChange={() => handleTokenCheckboxChange(token)} />
 				<span className="token-value">{token}</span>
 			</div>
@@ -164,19 +164,33 @@ function UserPopup() {
 						<div className="popup-window-body-content">
 							<div className="user-settings-section">
 								<h2>Account Information</h2>
-								<p><strong>Username:</strong> {username}</p>
-								<button className="logout-button" onClick={logoutUser}>Logout</button>
+								<p>
+									<strong>Username:</strong> {username}
+								</p>
+								<button className="logout-button" onClick={logoutUser}>
+									Logout
+								</button>
 							</div>
 
 							<div className="user-settings-section">
 								<h2>Change Password</h2>
 								<div className="input-group">
 									<label htmlFor="new-password">New Password</label>
-									<input type="password" placeholder=" " value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+									<input
+										type="password"
+										placeholder=" "
+										value={newPassword}
+										onChange={(e) => setNewPassword(e.target.value)}
+									/>
 								</div>
 								<div className="input-group">
 									<label htmlFor="confirm-password">Confirm Password</label>
-									<input type="password" placeholder=" " value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} />
+									<input
+										type="password"
+										placeholder=" "
+										value={confirmPassword}
+										onChange={(e) => setConfirmPassword(e.target.value)}
+									/>
 								</div>
 								<button onClick={changeUserPassword}>Change Password</button>
 							</div>
@@ -185,19 +199,26 @@ function UserPopup() {
 								<h2>API Tokens</h2>
 								<div className="input-group">
 									<label htmlFor="password">Password</label>
-									<input type="password" placeholder="Enter your password" value={password} onChange={(e) => setPassword(e.target.value)} />
+									<input
+										type="password"
+										placeholder="Enter your password"
+										value={password}
+										onChange={(e) => setPassword(e.target.value)}
+									/>
 								</div>
 								<button onClick={createNewUserToken}>Create New Token</button>
 								{newToken && (
 									<div className="new-token-display">
-										<p><strong>New Token:</strong></p>
+										<p>
+											<strong>New Token:</strong>
+										</p>
 										<p className="token-value">{newToken}</p>
 									</div>
 								)}
-								<div className="token-list">
-									{tokenElements}
-								</div>
-								<button className="invalidate-button" onClick={invalidateCheckedTokens}>Invalidate Selected Tokens</button>
+								<div className="token-list">{tokenElements}</div>
+								<button className="invalidate-button" onClick={invalidateCheckedTokens}>
+									Invalidate Selected Tokens
+								</button>
 							</div>
 						</div>
 					</div>

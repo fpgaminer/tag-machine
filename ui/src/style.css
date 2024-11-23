@@ -1061,6 +1061,7 @@ li p {
 	padding: 10px;
 	margin: 10px;
 	border-radius: 5px;
+	overflow: auto;
 }
 
 .suggested-prompts h4 {
@@ -1336,7 +1337,7 @@ li p {
 .task-progress-bar {
 	width: 200px;
 	height: 20px;
-	background-color: #ccc;
+	background-color: #f39c12;
 	border-radius: 5px;
 	overflow: hidden;
 	position: relative;
@@ -1352,10 +1353,6 @@ li p {
 
 .task-progress-segment.done {
 	background-color: #2ecc71;
-}
-
-.task-progress-segment.waiting {
-	background-color: #f39c12;
 }
 
 .task-counts-tooltip {
@@ -1374,4 +1371,9 @@ li p {
 
 .left-side {
 	flex-direction: row;
+}
+
+.multi-models-settings {
+	display: flex;
+	flex-direction: column;
 }

@@ -125,7 +125,7 @@ export class CurrentImageState {
 	}
 
 	get tagMap(): Map<string, Tag> | null {
-		const currentImage = this.image;
+		const currentImage = this.displayedImage;
 		const tagIdToTag = tagListState.tagIdToTagMap;
 
 		if (currentImage === null || tagIdToTag === null) {

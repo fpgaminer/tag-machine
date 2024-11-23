@@ -21,6 +21,7 @@ import RegisterWindow from "./RegisterWindow";
 import UserPopup from "./UserPopup";
 import AdminPopup from "./AdminPopup";
 import VQATaskMode from "./VQATaskMode";
+import VQAAIConfigPopup, { vqaAIConfigPopupState } from "./VQAAIConfigPopup";
 
 function App() {
 	const wikiPopupVisible = wikiPopupState.visible;
@@ -39,6 +40,7 @@ function App() {
 			{uploadPopupVisible ? <UploadPopup /> : null}
 			{userSettingsPopupVisible ? <UserPopup /> : null}
 			{adminPanelPopupVisible ? <AdminPopup /> : null}
+			{vqaAIConfigPopupState.visible && <VQAAIConfigPopup />}
 			<div className="column remainingSpace">
 				<div className="row contentBased">
 					<ErrorMessage />

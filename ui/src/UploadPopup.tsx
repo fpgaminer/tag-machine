@@ -1,12 +1,16 @@
 import { errorMessageState, uploadPopupState } from "./state";
 import { observer } from "mobx-react";
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import * as api from "./api";
 
 function UploadPopup() {
 	const [selectedFile, setSelectedFile] = useState<File | null>(null);
 	const [source, setSource] = useState("misc");
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+	useEffect(() => {
+		setSource(localStorage.getItem("upload-source") ?? "misc");
+	}, []);
 
 	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
 		if (e.target === e.currentTarget) {
@@ -22,6 +26,7 @@ function UploadPopup() {
 
 	function onSourceChanged(e: React.ChangeEvent<HTMLInputElement>) {
 		setSource(e.target.value);
+		localStorage.setItem("upload-source", e.target.value);
 	}
 
 	async function onUploadClicked() {
