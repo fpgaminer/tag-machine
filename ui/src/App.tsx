@@ -1,46 +1,45 @@
 import { observer } from "mobx-react";
-import WikiPopup from "./WikiPopup";
-import {
-	WindowStates,
-	adminPanelPopupState,
-	imageInfoPopupState,
-	uploadPopupState,
-	userSettingsPopupState,
-	wikiPopupState,
-	windowState,
-} from "./state";
+import { PopupStates, WindowStates, popupsState, windowState } from "./state";
 import ErrorMessage from "./ErrorMessage";
 import Menu from "./Menu";
-import ImageInfoPopup from "./ImageInfoPopup";
-import UploadPopup from "./UploadPopup";
 import TaggingMode from "./TaggingMode";
 import CaptionMode from "./CaptionMode";
 import LoginWindow from "./LoginWindow";
 import VQAMode from "./VQAMode";
 import RegisterWindow from "./RegisterWindow";
-import UserPopup from "./UserPopup";
-import AdminPopup from "./AdminPopup";
 import VQATaskMode from "./VQATaskMode";
-import VQAAIConfigPopup, { vqaAIConfigPopupState } from "./VQAAIConfigPopup";
+import { ImageInfoPopup } from "./ImageInfoPopup";
+import AdminPopup from "./AdminPopup";
+import UserPopup from "./UserPopup";
+import VQAAIConfigPopup from "./VQAAIConfigPopup";
+import { WikiPopup } from "./WikiPopup";
+import UploadPopup from "./UploadPopup";
 
 function App() {
-	const wikiPopupVisible = wikiPopupState.visible;
-	const wikiPopupTag = wikiPopupState.tag;
-	const imageInfoPopupVisible = imageInfoPopupState.visible;
-	const imageInfoPopupImage = imageInfoPopupState.image;
-	const uploadPopupVisible = uploadPopupState.visible;
-	const userSettingsPopupVisible = userSettingsPopupState.visible;
-	const adminPanelPopupVisible = adminPanelPopupState.visible;
 	const windowStateState = windowState.state;
+
+	const popups = Array.from(popupsState.popups).map((popup, index) => {
+		switch (popup) {
+			case PopupStates.ImageInfo:
+				return <ImageInfoPopup key={index} />;
+			case PopupStates.AdminPanel:
+				return <AdminPopup key={index} />;
+			case PopupStates.UserSettings:
+				return <UserPopup key={index} />;
+			case PopupStates.VqaAiSettings:
+				return <VQAAIConfigPopup key={index} />;
+			case PopupStates.Wiki:
+				return <WikiPopup key={index} />;
+			case PopupStates.Upload:
+				return <UploadPopup key={index} />;
+			default:
+				throw new Error(`Unknown popup state: ${popup}`);
+		}
+	});
 
 	return (
 		<div className="app-container">
-			{wikiPopupVisible && wikiPopupTag !== null ? <WikiPopup tag={wikiPopupTag} /> : null}
-			{imageInfoPopupVisible && imageInfoPopupImage !== null ? <ImageInfoPopup image={imageInfoPopupImage} /> : null}
-			{uploadPopupVisible ? <UploadPopup /> : null}
-			{userSettingsPopupVisible ? <UserPopup /> : null}
-			{adminPanelPopupVisible ? <AdminPopup /> : null}
-			{vqaAIConfigPopupState.visible && <VQAAIConfigPopup />}
+			{popups}
 			<div className="column remainingSpace">
 				<div className="row contentBased">
 					<ErrorMessage />

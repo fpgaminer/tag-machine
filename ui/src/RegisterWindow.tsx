@@ -1,6 +1,6 @@
 import { observer } from "mobx-react";
 import React, { useEffect, useState } from "react";
-import { errorMessageState, login, login_key_from_password } from "./state";
+import { errorMessageState, login_key_from_password } from "./state";
 import * as api from "./api";
 import Turnstile from "./turnstile";
 
@@ -24,14 +24,13 @@ function RegisterWindow() {
 		try {
 			const key = await api.getCfTurnstileKey();
 			setTurnstileKey(key);
-		}
-		catch (error) {
+		} catch (error) {
 			errorMessageState.setErrorMessage(`Error getting turnstile key: ${error as string}`);
 		}
 	}
 
 	useEffect(() => {
-		getTurnstileKey();
+		void getTurnstileKey();
 	}, []);
 
 	async function onRegisterClicked(e: React.MouseEvent) {
@@ -76,8 +75,7 @@ function RegisterWindow() {
 
 		try {
 			await api.createUser(username, login_key, turnstileToken, birthdateTimestamp, invitecode);
-		}
-		catch (error) {
+		} catch (error) {
 			errorMessageState.setErrorMessage(`Error logging in: ${error as string}`);
 			setState(RegisterState.Idle);
 			return;
@@ -98,30 +96,75 @@ function RegisterWindow() {
 					<form className="row spacing-5 registerForm">
 						<h2>Create an Account</h2>
 						<p className="legalWarning">
-							This website is part of an AI research initiative that involves analyzing and interacting with unfiltered images from the internet. These images may include <b>adult</b> or otherwise sensitive content. By creating an account, you confirm that you are <b>at least 18 years old</b> and agree to use this website responsibly. If you are not comfortable with potentially viewing such material, please do not create an account.
+							This website is part of an AI research initiative that involves analyzing and interacting with unfiltered
+							images from the internet. These images may include <b>adult</b> or otherwise sensitive content. By
+							creating an account, you confirm that you are <b>at least 18 years old</b> and agree to use this website
+							responsibly. If you are not comfortable with potentially viewing such material, please do not create an
+							account.
 							<div className="content-warning-checkbox">
-								<input type="checkbox" id="acknowledge-warning" name="acknowledge-warning" onChange={(e) => setAcknowledgeWarning(e.target.checked)} />
+								<input
+									type="checkbox"
+									id="acknowledge-warning"
+									name="acknowledge-warning"
+									onChange={(e) => setAcknowledgeWarning(e.target.checked)}
+								/>
 								<label htmlFor="acknowledge-warning">I acknowledge and agree to the terms.</label>
 							</div>
 						</p>
 						<div>
 							<label htmlFor="username">Username</label>
-							<input type="text" onChange={(e) => setUsername(e.target.value)} value={username} required id="username" name="username" />
+							<input
+								type="text"
+								onChange={(e) => setUsername(e.target.value)}
+								value={username}
+								required
+								id="username"
+								name="username"
+							/>
 						</div>
 						<div>
 							<label htmlFor="password">Password</label>
-							<input type="password" onChange={(e) => setPassword(e.target.value)} value={password} id="password" name="password" required />
+							<input
+								type="password"
+								onChange={(e) => setPassword(e.target.value)}
+								value={password}
+								id="password"
+								name="password"
+								required
+							/>
 						</div>
 						<div>
 							<label htmlFor="birthdate">Birthdate (for age verification only)</label>
-							<input type="date" onChange={(e) => setBirthdate(e.target.value)} value={birthdate} id="birthdate" name="birthdate" required />
+							<input
+								type="date"
+								onChange={(e) => setBirthdate(e.target.value)}
+								value={birthdate}
+								id="birthdate"
+								name="birthdate"
+								required
+							/>
 						</div>
 						<div>
 							<label htmlFor="invite_code">Invitation Code</label>
-							<input type="text" onChange={(e) => setInviteCode(e.target.value)} value={invitecode} id="invite_code" name="invite_code" required />
+							<input
+								type="text"
+								onChange={(e) => setInviteCode(e.target.value)}
+								value={invitecode}
+								id="invite_code"
+								name="invite_code"
+								required
+							/>
 						</div>
-						{turnstileKey !== null && state === RegisterState.Idle ? <Turnstile siteKey={turnstileKey} onSuccess={turnstileCallback} /> : turnstileKey === null ? <p>ERROR: Unable to load captcha</p> : null}
-						<div><button onClick={onRegisterClicked} disabled={(!acknowledgeWarning) || state !== RegisterState.Idle}>Create Account</button></div>
+						{turnstileKey !== null && state === RegisterState.Idle ? (
+							<Turnstile siteKey={turnstileKey} onSuccess={turnstileCallback} />
+						) : turnstileKey === null ? (
+							<p>ERROR: Unable to load captcha</p>
+						) : null}
+						<div>
+							<button onClick={onRegisterClicked} disabled={!acknowledgeWarning || state !== RegisterState.Idle}>
+								Create Account
+							</button>
+						</div>
 					</form>
 				</div>
 				<div className="column remainingSpace spacing-5"></div>
@@ -134,7 +177,9 @@ function RegisterWindow() {
 				<div className="column spacing-5 registerFormContainer">
 					<div className="row spacing-5 registerForm">
 						<h2>Account Created</h2>
-						<p>Your account has been created successfully. An administrator will review your account before activation.</p>
+						<p>
+							Your account has been created successfully. An administrator will review your account before activation.
+						</p>
 						<p>Thank you for registering.</p>
 					</div>
 				</div>

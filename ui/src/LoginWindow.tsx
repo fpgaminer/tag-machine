@@ -1,5 +1,5 @@
 import { observer } from "mobx-react";
-import React, { useState } from "react";
+import { useState } from "react";
 import { errorMessageState, login, windowState, WindowStates } from "./state";
 
 function LoginWindow() {
@@ -10,13 +10,11 @@ function LoginWindow() {
 		try {
 			if (password !== "") {
 				await login(username, password, null);
-			}
-			else {
+			} else {
 				errorMessageState.setErrorMessage("Please enter a password");
 				return;
 			}
-		}
-		catch (error) {
+		} catch (error) {
 			errorMessageState.setErrorMessage(`Error logging in: ${error as string}`);
 			return;
 		}
@@ -31,12 +29,20 @@ function LoginWindow() {
 			<div className="column remainingSpace spacing-5"></div>
 			<div className="column spacing-5 loginForm">
 				<div>Username:</div>
-				<div><input type="text" onChange={(e) => setUsername(e.target.value)} value={username} /></div>
+				<div>
+					<input type="text" onChange={(e) => setUsername(e.target.value)} value={username} />
+				</div>
 				<div>Password:</div>
-				<div><input type="password" onChange={(e) => setPassword(e.target.value)} value={password} /></div>
-				<div><button onClick={onLoginClicked}>Login</button></div>
-				<p>Don't have an account?</p>
-				<div><button onClick={onRegisterClicked}>Go to Create Account</button></div>
+				<div>
+					<input type="password" onChange={(e) => setPassword(e.target.value)} value={password} />
+				</div>
+				<div>
+					<button onClick={onLoginClicked}>Login</button>
+				</div>
+				<p>Don&apos;t have an account?</p>
+				<div>
+					<button onClick={onRegisterClicked}>Go to Create Account</button>
+				</div>
 			</div>
 			<div className="column remainingSpace spacing-5"></div>
 		</div>

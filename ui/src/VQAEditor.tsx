@@ -1,9 +1,9 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { addImageAttribute, errorMessageState, imageIdToUrl } from "./state";
+import { addImageAttribute, errorMessageState, imageIdToUrl, popupsState, PopupStates } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
-import { MultiModel, vqaAIConfigPopupState } from "./VQAAIConfigPopup";
+import VQAAIConfigPopup, { MultiModel } from "./VQAAIConfigPopup";
 
 interface QuestionAnswer {
 	question: string;
@@ -117,7 +117,7 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	}
 
 	function onAISettingsClicked() {
-		vqaAIConfigPopupState.setVisible(true);
+		popupsState.addPopup(PopupStates.VqaAiSettings);
 	}
 
 	return (

@@ -1,5 +1,5 @@
-import { wikiPopupState } from "./state";
 import { tagListState } from "./state/TagList";
+import { wikiPopupState } from "./WikiPopup";
 
 export interface DTextTag {
 	type: string;

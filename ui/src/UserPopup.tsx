@@ -1,9 +1,10 @@
-import { errorMessageState, login_key_from_password, userSettingsPopupState } from "./state";
+import { errorMessageState, login_key_from_password, popupsState, PopupStates } from "./state";
 import { observer } from "mobx-react";
 import { useState, useEffect } from "react";
 import * as api from "./api";
 import { userInfo } from "./api";
 import { authState } from "./state/Auth";
+import Popup from "./Popup";
 
 function UserPopup() {
 	const [username, setUsername] = useState<string>("");
@@ -44,12 +45,6 @@ function UserPopup() {
 		void fetchUserInfo();
 		void fetchUserTokens();
 	}, []);
-
-	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-		if (e.target === e.currentTarget) {
-			userSettingsPopupState.setVisible(false);
-		}
-	}
 
 	function handleTokenCheckboxChange(token: string) {
 		setCheckedTokens((prevCheckedtokens) => {
@@ -98,7 +93,7 @@ function UserPopup() {
 
 		authState.clearToken();
 		authState.setLoggedIn(false);
-		userSettingsPopupState.setVisible(false);
+		popupsState.removePopup(PopupStates.UserSettings);
 	}
 
 	async function changeUserPassword() {
@@ -151,80 +146,68 @@ function UserPopup() {
 	});
 
 	return (
-		<div className="popup-background" onClick={onBackgroundClicked}>
-			<div className="popup-window user-popup-window">
-				<div className="popup-window-content">
-					<div className="popup-window-header">
-						<div className="popup-window-title">User Settings</div>
-						<div className="popup-window-close" onClick={() => userSettingsPopupState.setVisible(false)}>
-							&times;
-						</div>
-					</div>
-					<div className="popup-window-body">
-						<div className="popup-window-body-content">
-							<div className="user-settings-section">
-								<h2>Account Information</h2>
-								<p>
-									<strong>Username:</strong> {username}
-								</p>
-								<button className="logout-button" onClick={logoutUser}>
-									Logout
-								</button>
-							</div>
+		<Popup onClose={() => popupsState.removePopup(PopupStates.UserSettings)} title="User Settings" className="user-popup">
+			<div className="popup-window-body-content">
+				<div className="user-settings-section">
+					<h2>Account Information</h2>
+					<p>
+						<strong>Username:</strong> {username}
+					</p>
+					<button className="logout-button" onClick={logoutUser}>
+						Logout
+					</button>
+				</div>
 
-							<div className="user-settings-section">
-								<h2>Change Password</h2>
-								<div className="input-group">
-									<label htmlFor="new-password">New Password</label>
-									<input
-										type="password"
-										placeholder=" "
-										value={newPassword}
-										onChange={(e) => setNewPassword(e.target.value)}
-									/>
-								</div>
-								<div className="input-group">
-									<label htmlFor="confirm-password">Confirm Password</label>
-									<input
-										type="password"
-										placeholder=" "
-										value={confirmPassword}
-										onChange={(e) => setConfirmPassword(e.target.value)}
-									/>
-								</div>
-								<button onClick={changeUserPassword}>Change Password</button>
-							</div>
-
-							<div className="user-settings-section">
-								<h2>API Tokens</h2>
-								<div className="input-group">
-									<label htmlFor="password">Password</label>
-									<input
-										type="password"
-										placeholder="Enter your password"
-										value={password}
-										onChange={(e) => setPassword(e.target.value)}
-									/>
-								</div>
-								<button onClick={createNewUserToken}>Create New Token</button>
-								{newToken && (
-									<div className="new-token-display">
-										<p>
-											<strong>New Token:</strong>
-										</p>
-										<p className="token-value">{newToken}</p>
-									</div>
-								)}
-								<div className="token-list">{tokenElements}</div>
-								<button className="invalidate-button" onClick={invalidateCheckedTokens}>
-									Invalidate Selected Tokens
-								</button>
-							</div>
-						</div>
+				<div className="user-settings-section">
+					<h2>Change Password</h2>
+					<div className="input-group">
+						<label htmlFor="new-password">New Password</label>
+						<input
+							type="password"
+							placeholder=" "
+							value={newPassword}
+							onChange={(e) => setNewPassword(e.target.value)}
+						/>
 					</div>
+					<div className="input-group">
+						<label htmlFor="confirm-password">Confirm Password</label>
+						<input
+							type="password"
+							placeholder=" "
+							value={confirmPassword}
+							onChange={(e) => setConfirmPassword(e.target.value)}
+						/>
+					</div>
+					<button onClick={changeUserPassword}>Change Password</button>
+				</div>
+
+				<div className="user-settings-section">
+					<h2>API Tokens</h2>
+					<div className="input-group">
+						<label htmlFor="password">Password</label>
+						<input
+							type="password"
+							placeholder="Enter your password"
+							value={password}
+							onChange={(e) => setPassword(e.target.value)}
+						/>
+					</div>
+					<button onClick={createNewUserToken}>Create New Token</button>
+					{newToken && (
+						<div className="new-token-display">
+							<p>
+								<strong>New Token:</strong>
+							</p>
+							<p className="token-value">{newToken}</p>
+						</div>
+					)}
+					<div className="token-list">{tokenElements}</div>
+					<button className="invalidate-button" onClick={invalidateCheckedTokens}>
+						Invalidate Selected Tokens
+					</button>
 				</div>
 			</div>
-		</div>
+		</Popup>
 	);
 }
 

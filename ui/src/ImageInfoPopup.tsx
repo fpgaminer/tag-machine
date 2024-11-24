@@ -1,9 +1,11 @@
-import { ImageObject, imageHashToUrl, imageInfoPopupState } from "./state";
+import { ImageObject, PopupStates, imageHashToUrl, popupsState } from "./state";
 import { observer } from "mobx-react";
 import exifr from "exifr";
 import React from "react";
 import { authState } from "./state/Auth";
 import { authenticatedFetch } from "./api";
+import Popup from "./Popup";
+import { makeAutoObservable } from "mobx";
 
 async function uploadToImgOps(imageHash: string, token: string | null) {
 	if (token === null) {
@@ -25,7 +27,7 @@ async function getExifData(url: string, token: string): Promise<string> {
 	try {
 		const response = await fetch(url, { method: "GET", headers: { Authorization: `Bearer ${token}` } });
 		const blob = await response.blob();
-		const exifData = await exifr.parse(blob);
+		const exifData = (await exifr.parse(blob)) as Record<string, string | number> | undefined;
 
 		if (!exifData) {
 			return "No EXIF data found";
@@ -35,21 +37,21 @@ async function getExifData(url: string, token: string): Promise<string> {
 		//	.map(([key, value]) => `${key}: ${value}`)
 		//	.join("\n");
 		const formattedData = formatExifData(exifData);
-		
+
 		return formattedData;
 	} catch (e) {
-		return `Error fetching EXIF data: ${e}`;
+		return `Error fetching EXIF data: ${String(e)}`;
 	}
 }
 
-function formatExifData(exifData: Record<string, any>): string {
+function formatExifData(exifData: Record<string, string | number>): string {
 	const result = [
 		exifData.Make ? `Make: ${exifData.Make}` : null,
 		exifData.Model ? `Model: ${exifData.Model}` : null,
 		exifData.LensModel ? `Lens: ${exifData.LensModel}` : null,
 		exifData.FocalLength ? `Focal Length: ${exifData.FocalLength} mm` : null,
 		exifData.FNumber ? `Aperture: f/${exifData.FNumber}` : null,
-		exifData.ExposureTime ? `Exposure: 1/${Math.round(1 / exifData.ExposureTime)}s` : null,
+		exifData.ExposureTime ? `Exposure: 1/${Math.round(1 / (exifData.ExposureTime as number))}s` : null,
 		exifData.ISO ? `ISO: ${exifData.ISO}` : null,
 		exifData.Flash ? `Flash: ${exifData.Flash}` : null,
 	];
@@ -57,37 +59,42 @@ function formatExifData(exifData: Record<string, any>): string {
 	return result.filter((x) => x !== null).join("\n");
 }
 
-interface ImageInfoPopupProps {
-	image: ImageObject;
-}
-
-function ImageInfoPopup(props: ImageInfoPopupProps) {
-	const { image } = props;
-	const url = imageHashToUrl(image.hash);
+export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
+	const image = imageInfoPopupState.image;
+	const url = image !== null ? imageHashToUrl(image.hash) : null;
 	const [exifData, setExifData] = React.useState<string | null>(null);
 	const userToken = authState.user_token;
 
 	React.useEffect(() => {
-		if (userToken !== null) {
+		if (userToken !== null && url !== null) {
 			void getExifData(url, userToken).then(setExifData);
 		}
-	}, [url]);
-
-	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-		if (e.target === e.currentTarget) {
-			imageInfoPopupState.setImageInfoPopupVisible(false);
-		}
-	}
+	}, [url, userToken]);
 
 	function toLink(name: string, value: string | string[]): JSX.Element {
-		if (name == "danbooru_post_id") {
-			return <a href={`https://danbooru.donmai.us/posts/${value}`} target="_blank" rel="noreferrer">{value}</a>;
+		if (value instanceof Array) {
+			return <span>{value}</span>;
 		}
-		else if (name == "e621_post_id") {
-			return <a href={`https://e621.net/posts/${value}`} target="_blank" rel="noreferrer">{value}</a>;
+
+		if (name == "danbooru_post_id") {
+			return (
+				<a href={`https://danbooru.donmai.us/posts/${value}`} target="_blank" rel="noreferrer">
+					{value}
+				</a>
+			);
+		} else if (name == "e621_post_id") {
+			return (
+				<a href={`https://e621.net/posts/${value}`} target="_blank" rel="noreferrer">
+					{value}
+				</a>
+			);
 		}
 
 		return <span>{value}</span>;
+	}
+
+	if (image === null) {
+		return null;
 	}
 
 	const attributes = Array.from(image.flatAttributes.entries()).map(([name, value]) => {
@@ -102,36 +109,29 @@ function ImageInfoPopup(props: ImageInfoPopupProps) {
 	const exif = exifData ? <pre>{exifData}</pre> : <p>Loading EXIF data...</p>;
 
 	return (
-		<div className="popup-background" onClick={onBackgroundClicked}>
-			<div className="image-info-popup">
-				<div className="image-info-popup-content">
-					<div className="image-info-popup-header">
-						<div className="image-info-popup-title">{image.hash}</div>
-						<div className="image-info-popup-close" onClick={() => imageInfoPopupState.setImageInfoPopupVisible(false)}>
-							X
-						</div>
+		<Popup onClose={() => popupsState.removePopup(PopupStates.ImageInfo)} title={image.hash} className="image-info-popup">
+			<div className="image-info-popup-body-content">
+				<div className="image-info-attributes">
+					{attributes}
+					<div className="image-info-attribute">
+						<div className="image-info-attribute-name">EXIF</div>
+						<div className="image-info-attribute-value">{exif}</div>
 					</div>
-					<div className="image-info-popup-body">
-						<div className="image-info-popup-body-content">
-							<div className="image-info-attributes">
-								{attributes}
-								<div className="image-info-attribute">
-									<div className="image-info-attribute-name">EXIF</div>
-									<div className="image-info-attribute-value">{exif}</div>
-								</div>
-								<div className="image-info-attribute">
-									<div className="image-info-attribute-name">ImgOps</div>
-									<div className="image-info-attribute-value">
-										<button onClick={() => uploadToImgOps(image.hash, userToken)}>Upload to ImgOps</button>
-									</div>
-								</div>
-							</div>
+					<div className="image-info-attribute">
+						<div className="image-info-attribute-name">ImgOps</div>
+						<div className="image-info-attribute-value">
+							<button onClick={() => uploadToImgOps(image.hash, userToken)}>Upload to ImgOps</button>
 						</div>
 					</div>
 				</div>
 			</div>
-		</div>
+		</Popup>
 	);
-}
+});
 
-export default observer(ImageInfoPopup);
+export const imageInfoPopupState = makeAutoObservable({
+	image: null as ImageObject | null,
+	setImage(image: ImageObject | null) {
+		this.image = image;
+	},
+});

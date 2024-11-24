@@ -1,9 +1,9 @@
-import { adminPanelPopupState, errorMessageState, login_key_from_password, uploadPopupState, userSettingsPopupState } from "./state";
+import { errorMessageState, popupsState, PopupStates } from "./state";
 import { observer } from "mobx-react";
-import { useRef, useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import * as api from "./api";
 import { listUsers } from "./api";
-import { authState } from "./state/Auth";
+import Popup from "./Popup";
 
 function AdminPopup() {
 	const [users, setUsers] = useState<api.ApiUserInfo[]>([]);
@@ -21,14 +21,8 @@ function AdminPopup() {
 	}
 
 	useEffect(() => {
-		fetchUsersList();
+		void fetchUsersList();
 	}, []);
-
-	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-		if (e.target === e.currentTarget) {
-			adminPanelPopupState.setVisible(false);
-		}
-	}
 
 	async function invalidateTokens(userId: number) {
 		setInvalidatingTokens((prevInvalidatingTokens) => {
@@ -113,7 +107,7 @@ function AdminPopup() {
 			return newActivating;
 		});
 
-		fetchUsersList();
+		void fetchUsersList();
 	}
 
 	async function onScopesDoubleClick(userId: number) {
@@ -150,7 +144,7 @@ function AdminPopup() {
 			}
 
 			setEdittingScopes(null);
-			fetchUsersList();
+			void fetchUsersList();
 		} else if (event.key === "Escape") {
 			setEdittingScopes(null);
 		}
@@ -166,51 +160,55 @@ function AdminPopup() {
 			<div key={index} className={`user-item`}>
 				<div className="user-item-id">{user.id}</div>
 				<div className="user-item-username">{user.username}</div>
-				{isEditingScopes ?
+				{isEditingScopes ? (
 					<div className="user-item-scopes">
-						<input type="text" value={scopeEdit} onChange={(e) => setScopeEdit(e.target.value)} onBlur={onScopeEditLostFocus} onKeyDown={onScopeEditKeyDown} />
-					</div> :
-					<div className="user-item-scopes" onDoubleClick={() => onScopesDoubleClick(user.id)}>{user.scopes}</div>
-				}
+						<input
+							type="text"
+							value={scopeEdit}
+							onChange={(e) => setScopeEdit(e.target.value)}
+							onBlur={onScopeEditLostFocus}
+							onKeyDown={onScopeEditKeyDown}
+						/>
+					</div>
+				) : (
+					<div className="user-item-scopes" onDoubleClick={() => onScopesDoubleClick(user.id)}>
+						{user.scopes}
+					</div>
+				)}
 				<div className="user-item-buttons">
-					<button onClick={() => invalidateTokens(user.id)} disabled={invalidating}>Delete Tokens</button>
-					{isActive ?
-						<button onClick={() => deactivateUser(user.id)} disabled={isActivating}>Deactivate</button> :
-						<button onClick={() => activateUser(user.id)} disabled={isActivating}>Activate</button>
-					}
+					<button onClick={() => invalidateTokens(user.id)} disabled={invalidating}>
+						Delete Tokens
+					</button>
+					{isActive ? (
+						<button onClick={() => deactivateUser(user.id)} disabled={isActivating}>
+							Deactivate
+						</button>
+					) : (
+						<button onClick={() => activateUser(user.id)} disabled={isActivating}>
+							Activate
+						</button>
+					)}
 				</div>
 			</div>
 		);
 	});
 
 	return (
-		<div className="popup-background" onClick={onBackgroundClicked}>
-			<div className="popup-window admin-popup-window">
-				<div className="popup-window-content">
-					<div className="popup-window-header">
-						<div className="popup-window-title">Admin</div>
-						<div className="popup-window-close" onClick={() => adminPanelPopupState.setVisible(false)}>
-							&times;
+		<Popup onClose={() => popupsState.removePopup(PopupStates.AdminPanel)} title="Admin" className="admin-popup-window">
+			<div className="popup-window-body-content">
+				<div className="admin-window-section">
+					<h2>Users</h2>
+					<div className="user-list">
+						<div className="user-list-header">
+							<div className="user-item-id">ID</div>
+							<div className="user-item-username">Username</div>
+							<div className="user-item-scopes">Scopes</div>
 						</div>
-					</div>
-					<div className="popup-window-body">
-						<div className="popup-window-body-content">
-							<div className="admin-window-section">
-								<h2>Users</h2>
-								<div className="user-list">
-									<div className="user-list-header">
-										<div className="user-item-id">ID</div>
-										<div className="user-item-username">Username</div>
-										<div className="user-item-scopes">Scopes</div>
-									</div>
-									{userElements}
-								</div>
-							</div>
-						</div>
+						{userElements}
 					</div>
 				</div>
 			</div>
-		</div>
+		</Popup>
 	);
 }
 

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import { useState } from "react";
 
 enum SaveButtonState {
 	Idle = 0,
@@ -35,7 +35,9 @@ function SaveButton({ isUnsaved, onSave }: SaveButtonProps) {
 	};
 
 	return (
-		<button onClick={handleClick} disabled={!isUnsaved || savingState === SaveButtonState.Saving}>{buttonText}</button>
+		<button onClick={handleClick} disabled={!isUnsaved || savingState === SaveButtonState.Saving}>
+			{buttonText}
+		</button>
 	);
 }
 

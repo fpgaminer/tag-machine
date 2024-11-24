@@ -8,18 +8,10 @@ import { Icon } from "@iconify/react";
 import { tagListState } from "./state/TagList";
 import React, { useEffect } from "react";
 import { imageListState } from "./state/ImageList";
-import {
-	errorMessageState,
-	imageInfoPopupState,
-	uploadPopupState,
-	windowState,
-	WindowStates,
-	imageResolutionState,
-	userSettingsPopupState,
-	adminPanelPopupState,
-} from "./state";
+import { errorMessageState, windowState, WindowStates, imageResolutionState, popupsState, PopupStates } from "./state";
 import { currentImageState } from "./state/CurrentImage";
 import { API_URL, authenticatedFetch } from "./api";
+import { imageInfoPopupState } from "./ImageInfoPopup";
 
 function Menu() {
 	const currentSearchText = useObserver(() => imageListState.currentSearch);
@@ -63,11 +55,11 @@ function Menu() {
 
 	function imageInfoClicked() {
 		imageInfoPopupState.setImage(currentImage);
-		imageInfoPopupState.setImageInfoPopupVisible(true);
+		popupsState.addPopup(PopupStates.ImageInfo);
 	}
 
 	function uploadClicked() {
-		uploadPopupState.setUploadPopupVisible(true);
+		popupsState.addPopup(PopupStates.Upload);
 	}
 
 	function onModeChanged(event: React.ChangeEvent<HTMLSelectElement>) {
@@ -95,9 +87,9 @@ function Menu() {
 
 	function userSettingsClicked(event: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
 		if (event.altKey) {
-			adminPanelPopupState.setVisible(true);
+			popupsState.addPopup(PopupStates.AdminPanel);
 		} else {
-			userSettingsPopupState.setVisible(true);
+			popupsState.addPopup(PopupStates.UserSettings);
 		}
 	}
 

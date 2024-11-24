@@ -1,8 +1,10 @@
-import { Tag, wikiPopupState } from "./state";
+import { popupsState, PopupStates, Tag } from "./state";
 import wikiPages from "./parsed_tag_pages.json";
 import DTextDisplay, { DTextTag } from "./DTextDisplay";
 import { observer } from "mobx-react";
 import { useEffect, useState } from "react";
+import { makeAutoObservable } from "mobx";
+import Popup from "./Popup";
 
 const DANBOORU_API = "https://danbooru.donmai.us";
 
@@ -13,23 +15,13 @@ interface PostData {
 	preview_file_url: string;
 }
 
-interface WikiPopupProps {
-	tag: Tag;
-}
-
-function WikiPopup(props: WikiPopupProps) {
-	const { tag } = props;
+export const WikiPopup = observer(function WikiPopupComponent() {
+	const tag = wikiPopupState.tag;
 	const [previewData, setPreviewData] = useState<PostData[] | null>(null);
-
-	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-		if (e.target === e.currentTarget) {
-			wikiPopupState.setWikiPopupVisible(false);
-		}
-	}
 
 	// Fetch preview posts for this tag
 	useEffect(() => {
-		async function fetchPreviewData() {
+		async function fetchPreviewData(tag: Tag) {
 			const response = await fetch(`${DANBOORU_API}/posts.json?tags=${tag.name}&limit=9`);
 			const data = (await response.json()) as PostData[];
 
@@ -42,10 +34,12 @@ function WikiPopup(props: WikiPopupProps) {
 			setPreviewData(data);
 		}
 
-		void fetchPreviewData();
+		if (tag !== null) {
+			void fetchPreviewData(tag);
+		}
 	}, [tag]);
 
-	if (!(tag.name in wikiPages)) {
+	if (tag === null || !(tag.name in wikiPages)) {
 		return null;
 	}
 
@@ -53,26 +47,14 @@ function WikiPopup(props: WikiPopupProps) {
 	const tagDText = wikiPagesTyped[tag.name];
 
 	return (
-		<div className="wiki-popup-background" onClick={onBackgroundClicked}>
-			<div className="wiki-popup">
-				<div className="wiki-popup-content">
-					<div className="wiki-popup-header">
-						<div className="wiki-popup-title">{tag.name}</div>
-						<div className="wiki-popup-close" onClick={() => wikiPopupState.setWikiPopupVisible(false)}>
-							X
-						</div>
-					</div>
-					<div className="wiki-popup-body">
-						<div className="wiki-popup-body-content">
-							<DTextDisplay dtext={tagDText} />
-							<PostPreviews posts={previewData ?? []} />
-						</div>
-					</div>
-				</div>
+		<Popup onClose={() => popupsState.removePopup(PopupStates.Wiki)} title={tag.name} className="wiki-popup">
+			<div className="wiki-popup-body-content">
+				<DTextDisplay dtext={tagDText} />
+				<PostPreviews posts={previewData ?? []} />
 			</div>
-		</div>
+		</Popup>
 	);
-}
+});
 
 function PostPreviews(props: { posts: PostData[] }) {
 	const { posts } = props;
@@ -88,4 +70,9 @@ function PostPreviews(props: { posts: PostData[] }) {
 	return <div className="wiki-popup-post-previews">{postItems}</div>;
 }
 
-export default observer(WikiPopup);
+export const wikiPopupState = makeAutoObservable({
+	tag: null as Tag | null,
+	setTag(tag: Tag) {
+		this.tag = tag;
+	},
+});

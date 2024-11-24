@@ -1,22 +1,14 @@
-import { errorMessageState, uploadPopupState } from "./state";
+import { errorMessageState, popupsState, PopupStates } from "./state";
 import { observer } from "mobx-react";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import * as api from "./api";
+import useLocalStorageState from "./useLocalStateStorage";
+import Popup from "./Popup";
 
 function UploadPopup() {
 	const [selectedFile, setSelectedFile] = useState<File | null>(null);
-	const [source, setSource] = useState("misc");
+	const [source, setSource] = useLocalStorageState("upload-source", "misc");
 	const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-	useEffect(() => {
-		setSource(localStorage.getItem("upload-source") ?? "misc");
-	}, []);
-
-	function onBackgroundClicked(e: React.MouseEvent<HTMLDivElement, MouseEvent>) {
-		if (e.target === e.currentTarget) {
-			uploadPopupState.setUploadPopupVisible(false);
-		}
-	}
 
 	function onFileSelected(e: React.ChangeEvent<HTMLInputElement>) {
 		if (e.target.files && e.target.files.length > 0) {
@@ -26,7 +18,6 @@ function UploadPopup() {
 
 	function onSourceChanged(e: React.ChangeEvent<HTMLInputElement>) {
 		setSource(e.target.value);
-		localStorage.setItem("upload-source", e.target.value);
 	}
 
 	async function onUploadClicked() {
@@ -81,40 +72,34 @@ function UploadPopup() {
 	}
 
 	return (
-		<div className="popup-background" onClick={onBackgroundClicked}>
-			<div className="upload-popup" onDragOver={onDragOver} onDrop={onDrop}>
-				<div className="upload-popup-content">
-					<div className="upload-popup-header">
-						<div className="upload-popup-title">Upload Image</div>
-						<div className="upload-popup-close" onClick={() => uploadPopupState.setUploadPopupVisible(false)}>
-							X
-						</div>
+		<Popup
+			onClose={() => popupsState.removePopup(PopupStates.Upload)}
+			title="Upload Image"
+			className="upload-popup"
+			onDragOver={onDragOver}
+			onDrop={onDrop}
+		>
+			<div className="upload-popup-body-content">
+				<div className="upload-popup-body-content-dropzone" onClick={handleDropzoneClick}>
+					<div className="dropzone-close" onClick={handleDropzoneClose}>
+						X
 					</div>
-					<div className="upload-popup-body">
-						<div className="upload-popup-body-content">
-							<div className="upload-popup-body-content-dropzone" onClick={handleDropzoneClick}>
-								<div className="dropzone-close" onClick={handleDropzoneClose}>
-									X
-								</div>
-								{selectedFile ? (
-									<img src={URL.createObjectURL(selectedFile)} />
-								) : (
-									<p>
-										<b>Choose a file</b>
-										<br /> or drag it here
-									</p>
-								)}
-								<input type="file" accept="image/*" onChange={onFileSelected} ref={fileInputRef} />
-							</div>
-							<div>
-								Source: <input type="text" placeholder="Source" value={source} onChange={onSourceChanged} />
-							</div>
-							<button onClick={onUploadClicked}>Upload</button>
-						</div>
-					</div>
+					{selectedFile ? (
+						<img src={URL.createObjectURL(selectedFile)} />
+					) : (
+						<p>
+							<b>Choose a file</b>
+							<br /> or drag it here
+						</p>
+					)}
+					<input type="file" accept="image/*" onChange={onFileSelected} ref={fileInputRef} />
 				</div>
+				<div>
+					Source: <input type="text" placeholder="Source" value={source} onChange={onSourceChanged} />
+				</div>
+				<button onClick={onUploadClicked}>Upload</button>
 			</div>
-		</div>
+		</Popup>
 	);
 }
 

@@ -192,26 +192,6 @@ class WindowState {
 
 export const windowState = new WindowState();
 
-/* WikiPopupState */
-class WikiPopupState {
-	visible = false;
-	tag: Tag | null = null;
-
-	constructor() {
-		makeAutoObservable(this);
-	}
-
-	setWikiPopupVisible(visible: boolean) {
-		this.visible = visible;
-	}
-
-	setTag(tag: Tag | null) {
-		this.tag = tag;
-	}
-}
-
-export const wikiPopupState = new WikiPopupState();
-
 /* Image Resolution State */
 class ImageResolutionState {
 	resolution: number | null = null;
@@ -227,68 +207,33 @@ class ImageResolutionState {
 
 export const imageResolutionState = new ImageResolutionState();
 
-/* Image Info Popup State */
-class ImageInfoPopupState {
-	visible = false;
-	image: ImageObject | null = null;
+/* Popups State */
+export enum PopupStates {
+	ImageInfo = "image-info",
+	Wiki = "wiki",
+	UserSettings = "user-settings",
+	AdminPanel = "admin-panel",
+	VqaAiSettings = "vqa-ai-settings",
+	Upload = "upload",
+}
+
+class PopupsState {
+	popups: Set<PopupStates> = new Set();
 
 	constructor() {
 		makeAutoObservable(this);
 	}
 
-	setImage(image: ImageObject | null) {
-		this.image = image;
+	addPopup(popup: PopupStates) {
+		this.popups.add(popup);
 	}
 
-	setImageInfoPopupVisible(visible: boolean) {
-		this.visible = visible;
-	}
-}
-
-export const imageInfoPopupState = new ImageInfoPopupState();
-
-class UploadPopupState {
-	visible = false;
-
-	constructor() {
-		makeAutoObservable(this);
-	}
-
-	setUploadPopupVisible(visible: boolean) {
-		this.visible = visible;
+	removePopup(popup: PopupStates) {
+		this.popups.delete(popup);
 	}
 }
 
-export const uploadPopupState = new UploadPopupState();
-
-class UserSettingsPopupState {
-	visible = false;
-
-	constructor() {
-		makeAutoObservable(this);
-	}
-
-	setVisible(visible: boolean) {
-		this.visible = visible;
-	}
-}
-
-export const userSettingsPopupState = new UserSettingsPopupState();
-
-/* Admin Panel Popup State */
-class AdminPanelPopupState {
-	visible = false;
-
-	constructor() {
-		makeAutoObservable(this);
-	}
-
-	setVisible(visible: boolean) {
-		this.visible = visible;
-	}
-}
-
-export const adminPanelPopupState = new AdminPanelPopupState();
+export const popupsState = new PopupsState();
 
 class FavoriteTagsState {
 	_favoriteTags: Set<string> = new Set(JSON.parse(localStorage.getItem("favoriteTags") || "[]") as string[]);

@@ -1,6 +1,7 @@
-import { Tag, toggleImageTag, wikiPopupState } from "./state";
+import { popupsState, PopupStates, Tag, toggleImageTag } from "./state";
 import { observer } from "mobx-react";
 import { currentImageState } from "./state/CurrentImage";
+import { wikiPopupState } from "./WikiPopup";
 
 interface TagListUIProps {
 	tags: Tag[];
@@ -24,7 +25,7 @@ function TagListUI(props: TagListUIProps) {
 
 	function onTagRightClicked(tag: Tag) {
 		wikiPopupState.setTag(tag);
-		wikiPopupState.setWikiPopupVisible(true);
+		popupsState.addPopup(PopupStates.Wiki);
 	}
 
 	// Tag UI

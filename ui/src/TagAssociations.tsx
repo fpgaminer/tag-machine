@@ -11,8 +11,7 @@ function AssociationTagList() {
 
 	if (serverDown) {
 		contents = <p>Prediction server is currently offline</p>;
-	}
-	else if (associations !== null) {
+	} else if (associations !== null) {
 		const tags = associations.map((tag) => tag.tag);
 		const tagIdToScoreMap = new Map<number, number>();
 
