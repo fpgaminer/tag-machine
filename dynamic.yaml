@@ -17,8 +17,8 @@ http:
     api-service:
       loadBalancer:
         servers:
-          - url: "http://host.docker.internal:8186"
-          #- url: "http://rust-api:8086"
+          #- url: "http://host.docker.internal:8186"
+          - url: "http://rust-api:8086"
 
     # Service for Web Dev
     web-service:

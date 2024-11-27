@@ -3,7 +3,9 @@ import { addImageAttribute, errorMessageState, imageIdToUrl, popupsState, PopupS
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
-import VQAAIConfigPopup, { MultiModel } from "./VQAAIConfigPopup";
+import { MultiModel } from "./VQAAIConfigPopup";
+import arrowSync24Filled from "@iconify/icons-fluent/arrow-sync-24-filled";
+import { Icon } from "@iconify/react";
 
 interface QuestionAnswer {
 	question: string;
@@ -17,6 +19,8 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
+	const [isCustomLoading, setIsCustomLoading] = useState(false);
+	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
 
 	// Update the question and answer when the image changes
 	useEffect(() => {
@@ -97,12 +101,25 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	}
 
 	async function onCustomClicked() {
+		setIsCustomLoading(true);
 		const response = await doCustom(imageId, "");
+		setIsCustomLoading(false);
 		if (response === null) {
 			return;
 		}
 
 		setLocalQA({ ...localQA, question: response });
+	}
+
+	async function onCustom2Clicked() {
+		setIsCustom2Loading(true);
+		const response = await doCustom(imageId, localQA.question, 5031);
+		setIsCustom2Loading(false);
+		if (response === null) {
+			return;
+		}
+
+		setLocalQA({ ...localQA, answer: response });
 	}
 
 	function onPromptSelected(prompt: string) {
@@ -129,7 +146,10 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 						AI Settings
 					</button>
 					<button onClick={onCustomClicked} title="Ask the custom AI model for a suggested question">
-						Custom
+						Custom {isCustomLoading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
+					</button>
+					<button onClick={onCustom2Clicked} title="Ask the custom AI model for a suggested answer">
+						CustomA {isCustom2Loading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
 					</button>
 					<button onClick={onSuggestQuestionsClicked} title="Ask Gemini for a suggested question">
 						Suggest Qs
@@ -332,9 +352,9 @@ async function doGemini(
 	}
 }
 
-async function doCustom(image_id: number, prompt: string): Promise<string | null> {
+async function doCustom(image_id: number, prompt: string, port: number = 5028): Promise<string | null> {
 	try {
-		const response = await fetch("http://127.0.0.1:5028/predict", {
+		const response = await fetch(`http://127.0.0.1:${port}/predict`, {
 			method: "POST",
 			headers: {
 				"Content-Type": "application/json",

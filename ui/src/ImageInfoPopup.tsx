@@ -72,8 +72,10 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 	}, [url, userToken]);
 
 	function toLink(name: string, value: string | string[]): JSX.Element {
-		if (value instanceof Array) {
+		if (value instanceof Array && value.length != 1) {
 			return <span>{value}</span>;
+		} else if (value instanceof Array) {
+			value = value[0];
 		}
 
 		if (name == "danbooru_post_id") {
@@ -109,7 +111,11 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 	const exif = exifData ? <pre>{exifData}</pre> : <p>Loading EXIF data...</p>;
 
 	return (
-		<Popup onClose={() => popupsState.removePopup(PopupStates.ImageInfo)} title={image.hash} className="image-info-popup">
+		<Popup
+			onClose={() => popupsState.removePopup(PopupStates.ImageInfo)}
+			title={image.hash}
+			className="image-info-popup"
+		>
 			<div className="image-info-popup-body-content">
 				<div className="image-info-attributes">
 					{attributes}
