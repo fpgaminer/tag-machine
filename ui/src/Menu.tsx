@@ -21,6 +21,7 @@ function Menu() {
 	const currentModeValue = currentMode ?? WindowStates.Tagging;
 	const currentImageResolution = useObserver(() => imageResolutionState.resolution);
 	const searchHistory = useObserver(() => imageListState.searchHistory);
+	const showSearch = currentMode !== WindowStates.VqaTasks;
 
 	useEffect(() => {
 		setSearchText(currentSearchText);
@@ -136,23 +137,25 @@ function Menu() {
 					<p>Add Tag</p>
 				</button>
 			</div>
-			<div className="menu-item">
-				<input
-					placeholder="Search"
-					value={searchText}
-					onChange={(e) => setSearchText(e.target.value)}
-					onKeyDown={handleKeyDown}
-					list="search-history"
-				/>
-				<datalist id="search-history">
-					{searchHistory.map((search, index) => (
-						<option key={index} value={search} />
-					))}
-				</datalist>
-				<button className="menu-button" onClick={searchClicked}>
-					Search
-				</button>
-			</div>
+			{showSearch ? (
+				<div className="menu-item">
+					<input
+						placeholder="Search"
+						value={searchText}
+						onChange={(e) => setSearchText(e.target.value)}
+						onKeyDown={handleKeyDown}
+						list="search-history"
+					/>
+					<datalist id="search-history">
+						{searchHistory.map((search, index) => (
+							<option key={index} value={search} />
+						))}
+					</datalist>
+					<button className="menu-button" onClick={searchClicked}>
+						Search
+					</button>
+				</div>
+			) : null}
 			<div className="menu-item">
 				<button className="menu-button" onClick={userSettingsClicked}>
 					<Icon icon={settings24Regular} />

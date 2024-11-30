@@ -11,7 +11,7 @@
 	font-family: 'Noto Sans';
 	font-style: normal;
 	font-weight: 400;
-	src: url('../fonts/noto-sans-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
+	src: url('fonts/noto-sans-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
 }
 
 body, html {
@@ -753,6 +753,15 @@ li p {
     margin-bottom: 0;
 }
 
+.vqaEditor input[type="text"] {
+	padding: 10px;
+	border-radius: 5px;
+	border: none;
+	font-size: 1em;
+	background-color: #3f3f3f;
+	color: #f0f0f0;
+}
+
 
 /* Login Form */
 /* Login Form Styling */
@@ -1287,4 +1296,35 @@ li p {
 
 .spinner {
 	animation: spin 1s linear infinite;
+}
+
+
+.ai-suggest-button {
+	position: absolute;
+	right: 10px;
+	background-color: rgba(0, 0, 0, 0.2);
+	border-radius: 50%;
+	border: none;
+	cursor: pointer;
+	color: #f0f0f0;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	padding: 8px;
+	font-size: 1.2em;
+}
+
+.ai-suggest-button:hover {
+	background-color: rgba(255, 255, 255, 0.2);
+	color: #ffffff;
+}
+
+.category-input-container {
+	position: relative;
+	display: flex;
+	align-items: center;
+}
+
+.category-input-container input {
+	width: 100%;
 }

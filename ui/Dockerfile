@@ -2,7 +2,7 @@ FROM node:latest AS builder
 
 WORKDIR /usr/src/app
 
-COPY public/fonts ./public/fonts
+COPY public ./public
 COPY src ./src
 COPY index.html ./
 COPY package-lock.json ./
@@ -16,13 +16,13 @@ RUN npm install
 RUN npm run build
 
 # Stage 2: Serve the built files with Caddy
-FROM caddy:latest
+#FROM caddy:latest
 
-COPY --from=builder /usr/src/app/dist /srv
+#COPY --from=builder /usr/src/app/dist /srv
 
-#FROM nginx:alpine
-#COPY --from=0 /usr/src/app/dist /usr/share/nginx/html
+FROM nginx:alpine
+COPY --from=builder /usr/src/app/dist /usr/share/nginx/html
 EXPOSE 80
 
-#CMD ["nginx", "-g", "daemon off;"]
-CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
+CMD ["nginx", "-g", "daemon off;"]
+#CMD ["caddy", "run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]

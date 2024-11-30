@@ -13,7 +13,6 @@ function VQAMode() {
 	const [activeTagListHeight, setActiveTagListHeight] = useState(initialHeight);
 	const isResizing = useRef(false);
 	const currentImage = currentImageState.image;
-	const currentImageQA = currentImage === null ? null : currentImage.singularAttribute("questionAnswer");
 
 	const noImagesFound = imageListState.searchList !== null && imageListState.searchList.length == 0;
 	const message = noImagesFound ? "No images found" : null;
@@ -74,7 +73,7 @@ function VQAMode() {
 				</div>
 				<div className="divider horizontal-divider" onMouseDown={onMouseDown} />
 				<div className="resizable-panel" style={{ flex: 1 }}>
-					{currentImage !== null ? <VQAEditor imageId={currentImage.id} imageQA={currentImageQA} /> : null}
+					{currentImage !== null ? <VQAEditor currentImage={currentImage} /> : null}
 				</div>
 			</div>
 		</div>

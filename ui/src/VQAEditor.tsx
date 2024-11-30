@@ -1,18 +1,24 @@
 import React, { useEffect, useState, useRef, useMemo } from "react";
-import { addImageAttribute, errorMessageState, imageIdToUrl, popupsState, PopupStates } from "./state";
+import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
 import { MultiModel } from "./VQAAIConfigPopup";
 import arrowSync24Filled from "@iconify/icons-fluent/arrow-sync-24-filled";
+import magicwand24Filled from "@iconify/icons-fluent/magic-wand-24-filled";
 import { Icon } from "@iconify/react";
+import { observer } from "mobx-react";
+import OpenAI from "openai";
 
 interface QuestionAnswer {
 	question: string;
 	answer: string;
 }
 
-function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | null }) {
+function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
+	const imageId = currentImage.id;
+	const imageQA = currentImage.singularAttribute("questionAnswer");
+	const imageCategory = currentImage.singularAttribute("vqa_category") ?? "";
 	const parsedQA = useMemo(() => (imageQA === null ? null : (JSON.parse(imageQA) as QuestionAnswer)), [imageQA]);
 	const [localQA, setLocalQA] = useState<QuestionAnswer>(parsedQA ?? { question: "", answer: "" });
 	const localStorageCaption = useMemo(() => getLocalStorageVQA(imageId), [imageId]);
@@ -21,16 +27,25 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
+	const [qaCategory, setQACategory] = useState<string>("");
 
 	// Update the question and answer when the image changes
 	useEffect(() => {
 		setLocalQA(localStorageCaption ?? parsedQA ?? { question: "", answer: "" });
-	}, [parsedQA, localStorageCaption]);
+		setQACategory(imageCategory);
+	}, [parsedQA, localStorageCaption, imageCategory]);
 
-	const isUnsaved = localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer;
+	const isUnsaved =
+		localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer || qaCategory !== imageCategory;
 
 	async function handleSave() {
-		await addImageAttribute(imageId, "questionAnswer", JSON.stringify(localQA), true);
+		if (localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer) {
+			await addImageAttribute(imageId, "questionAnswer", JSON.stringify(localQA), true);
+		}
+
+		if (qaCategory !== imageCategory) {
+			await addImageAttribute(imageId, "vqa_category", qaCategory, true);
+		}
 
 		// Clear the local storage
 		clearLocalStorageVQA(imageId);
@@ -39,6 +54,7 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 	function onRevertClicked() {
 		// Revert to the server's version of the question and answer
 		setLocalQA(parsedQA ?? { question: "", answer: "" });
+		setQACategory(imageCategory);
 		clearLocalStorageVQA(imageId);
 	}
 
@@ -102,24 +118,46 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 
 	async function onCustomClicked() {
 		setIsCustomLoading(true);
-		const response = await doCustom(imageId, "");
-		setIsCustomLoading(false);
-		if (response === null) {
-			return;
+		//const response = await doCustom(imageId, "");
+
+		for await (const response of doCustom(
+			imageId,
+			"questions",
+			"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.",
+		)) {
+			if (response === null) {
+				return;
+			}
+
+			setLocalQA({ ...localQA, question: response });
 		}
 
-		setLocalQA({ ...localQA, question: response });
+		setIsCustomLoading(false);
+		//if (response === null) {
+		//	return;
+		//}
+
+		//setLocalQA({ ...localQA, question: response });
 	}
 
 	async function onCustom2Clicked() {
 		setIsCustom2Loading(true);
-		const response = await doCustom(imageId, localQA.question, 5031);
-		setIsCustom2Loading(false);
-		if (response === null) {
-			return;
-		}
 
-		setLocalQA({ ...localQA, answer: response });
+		for await (const response of doCustom(imageId, "answers", localQA.question, 5052)) {
+			if (response === null) {
+				return;
+			}
+
+			setLocalQA({ ...localQA, answer: response });
+		}
+		//const response = await doCustom(imageId, localQA.question, 5031);
+		//const response = "";
+		setIsCustom2Loading(false);
+		//if (response === null) {
+		//	return;
+		//}
+
+		//setLocalQA({ ...localQA, answer: response });
 	}
 
 	function onPromptSelected(prompt: string) {
@@ -135,6 +173,30 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 
 	function onAISettingsClicked() {
 		popupsState.addPopup(PopupStates.VqaAiSettings);
+	}
+
+	async function onSuggestCategoryClicked() {
+		const response = await openAICompatRequest(
+			"",
+			"http://localhost:5032/v1/chat/completions",
+			"add-source",
+			[
+				{
+					role: "user",
+					content: [
+						{
+							type: "text",
+							text: localQA.question,
+						},
+					],
+				},
+			],
+			128,
+			0.7,
+			0.9,
+		);
+
+		setQACategory(response.trim());
 	}
 
 	return (
@@ -192,6 +254,21 @@ function VQAEditor({ imageId, imageQA }: { imageId: number; imageQA: string | nu
 				</div>
 			)}
 			<div className="remainingSpace vqaEditor">
+				<div className="category-input-container">
+					<input
+						placeholder="Enter the category"
+						value={qaCategory}
+						onChange={(e) => setQACategory(e.target.value)}
+						type="text"
+					/>
+					<button
+						className="ai-suggest-button"
+						title="Ask the AI for a suggested category"
+						onClick={onSuggestCategoryClicked}
+					>
+						<Icon icon={magicwand24Filled} />
+					</button>
+				</div>
 				<textarea placeholder="Enter your question" value={localQA.question} onChange={onQuestionChanged} />
 				<textarea
 					ref={answerTextareaRef}
@@ -223,7 +300,7 @@ function getLocalStorageVQA(imageId: number): QuestionAnswer | null {
 	return JSON.parse(v) as QuestionAnswer;
 }
 
-export default VQAEditor;
+export default observer(VQAEditor);
 
 async function getImageAsBase64(imageId: number): Promise<{ base64: string; mimeType: string }> {
 	const response = await authenticatedFetch(imageIdToUrl(imageId));
@@ -352,21 +429,55 @@ async function doGemini(
 	}
 }
 
-async function doCustom(image_id: number, prompt: string, port: number = 5028): Promise<string | null> {
+async function* doCustom(image_id: number, model: string, prompt: string, port: number = 5048): AsyncGenerator<string> {
+	const client = new OpenAI({
+		apiKey: "fungal",
+		baseURL: `http://127.0.0.1:${port}/v1`,
+		dangerouslyAllowBrowser: true,
+	});
+
 	try {
-		const response = await fetch(`http://127.0.0.1:${port}/predict`, {
-			method: "POST",
-			headers: {
-				"Content-Type": "application/json",
-			},
-			body: JSON.stringify({ prompt, image_id }),
+		const dataUrl = await getImageAsDataUrl(image_id);
+		const stream = await client.chat.completions.create({
+			model: model,
+			messages: [
+				{
+					role: "system",
+					content: "You are a helpful image captioner.",
+				},
+				{
+					role: "user",
+					content: [
+						{
+							type: "image_url",
+							image_url: {
+								url: dataUrl,
+							},
+						},
+						{
+							type: "text",
+							text: prompt,
+						},
+					],
+				},
+			],
+			stream: true,
+			top_p: 0.9,
+			temperature: 1.0,
+			max_tokens: 1024,
 		});
 
-		const json = (await response.json()) as { output: string };
-		return json.output;
+		let response = "";
+
+		for await (const chunk of stream) {
+			const piece = chunk.choices[0]?.delta?.content || "";
+
+			response += piece;
+			yield response;
+		}
 	} catch (e) {
 		alert(`Error running custom model: ${String(e)}`);
-		return "";
+		yield "";
 	}
 }
 
@@ -460,18 +571,30 @@ async function openAICompatRequest(
 	model: string,
 	messages: object[],
 	max_tokens: number,
+	temperature?: number,
+	top_p?: number,
 ): Promise<string> {
+	const body: { model: string; messages: object[]; max_tokens: number; temperature?: number; top_p?: number } = {
+		model,
+		messages,
+		max_tokens,
+	};
+
+	if (temperature !== undefined) {
+		body["temperature"] = temperature;
+	}
+
+	if (top_p !== undefined) {
+		body["top_p"] = top_p;
+	}
+
 	const response = await fetch(url, {
 		method: "POST",
 		headers: {
 			"Content-Type": "application/json",
 			Authorization: `Bearer ${api_key}`,
 		},
-		body: JSON.stringify({
-			model,
-			messages,
-			max_tokens,
-		}),
+		body: JSON.stringify(body),
 	});
 
 	interface Response {

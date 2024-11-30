@@ -25,7 +25,6 @@ function VQATaskMode() {
 	const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
 	const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
 	const currentImage = currentTask !== null ? imageListState.getImageById(currentTask.data.image_id) : null;
-	const currentImageQA = currentImage !== null ? currentImage.singularAttribute("questionAnswer") : null;
 
 	const onMouseDown = () => {
 		isResizing.current = true;
@@ -66,27 +65,6 @@ function VQATaskMode() {
 		setTaskCounts(taskCounts);
 	}
 
-	async function acquireTask() {
-		const task = await api.acquireTask("vqa-needs-prompts");
-
-		if (task === null) {
-			setCurrentTask(null);
-			return;
-		}
-
-		// Parse task data
-		const data = JSON.parse(task.data) as TaskData;
-
-		// Fetch the image into our cache
-		await imageListState.fetchImage(data.image_id);
-
-		// Set the current task
-		setCurrentTask({ task, data });
-
-		// Update task counts
-		void fetchTaskCount();
-	}
-
 	async function onFinishedClicked() {
 		if (currentTask === null) {
 			return;
@@ -95,17 +73,23 @@ function VQATaskMode() {
 		await api.finishTask(currentTask.task.id);
 
 		setCurrentTask(null);
-		void acquireTask();
+		setCurrentTask(await acquireTask());
+		void fetchTaskCount();
 	}
 
-	function onSkipClicked() {
+	async function onSkipClicked() {
 		setCurrentTask(null);
-		void acquireTask();
+		setCurrentTask(await acquireTask());
+		void fetchTaskCount();
 	}
 
 	// Acquire a task on load
 	useEffect(() => {
-		void acquireTask();
+		async function initialTask() {
+			setCurrentTask(await acquireTask());
+			void fetchTaskCount();
+		}
+		void initialTask();
 	}, []);
 
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -130,7 +114,7 @@ function VQATaskMode() {
 				</div>
 				<div className="divider horizontal-divider" onMouseDown={onMouseDown} />
 				<div className="resizable-panel" style={{ flex: 1 }}>
-					{currentTask !== null ? <VQAEditor imageId={currentTask.data.image_id} imageQA={currentImageQA} /> : null}
+					{currentImage !== null ? <VQAEditor currentImage={currentImage} /> : null}
 				</div>
 			</div>
 		</div>
@@ -138,3 +122,19 @@ function VQATaskMode() {
 }
 
 export default observer(VQATaskMode);
+
+async function acquireTask(): Promise<CurrentTask | null> {
+	const task = await api.acquireTask("vqa-needs-prompts");
+
+	if (task === null) {
+		return null;
+	}
+
+	// Parse task data
+	const data = JSON.parse(task.data) as TaskData;
+
+	// Fetch the image into our cache
+	await imageListState.fetchImage(data.image_id);
+
+	return { task, data };
+}

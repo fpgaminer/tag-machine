@@ -118,6 +118,10 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 		>
 			<div className="image-info-popup-body-content">
 				<div className="image-info-attributes">
+					<div className="image-info-attribute">
+						<div className="image-info-attribute-name">Image ID</div>
+						<div className="image-info-attribute-value">{image.id}</div>
+					</div>
 					{attributes}
 					<div className="image-info-attribute">
 						<div className="image-info-attribute-name">EXIF</div>
