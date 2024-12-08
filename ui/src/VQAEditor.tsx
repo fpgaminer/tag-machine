@@ -27,7 +27,9 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
+	const [isSuggestAnswersLoading, setIsSuggestAnswersLoading] = useState(false);
 	const [qaCategory, setQACategory] = useState<string>("");
+	const wordCount = useMemo(() => localQA.answer.trim().split(/\s+/).filter(Boolean).length, [localQA.answer]);
 
 	// Update the question and answer when the image changes
 	useEffect(() => {
@@ -69,10 +71,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	}
 
 	async function onSuggestAnswersClicked() {
+		setIsSuggestAnswersLoading(true);
 		const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
 
 		const suggestions = await multiModelSuggestions(localQA.question, imageId, models);
 		setSuggestedAnswers(suggestions);
+		setIsSuggestAnswersLoading(false);
 	}
 
 	async function onSuggestQuestionsClicked() {
@@ -119,12 +123,14 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	async function onCustomClicked() {
 		setIsCustomLoading(true);
 		//const response = await doCustom(imageId, "");
+		let prompt =
+			"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
 
-		for await (const response of doCustom(
-			imageId,
-			"questions",
-			"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.",
-		)) {
+		if (qaCategory !== "") {
+			prompt = `${prompt} The prompt/question must be in the category: ${qaCategory}`;
+		}
+
+		for await (const response of doCustom(imageId, "questions", prompt)) {
 			if (response === null) {
 				return;
 			}
@@ -217,7 +223,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						Suggest Qs
 					</button>
 					<button onClick={onSuggestAnswersClicked} title="Ask the list of AI models to suggest an answer">
-						Suggest As
+						Suggest As {isSuggestAnswersLoading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
 					</button>
 					<button
 						onClick={onRevertClicked}
@@ -276,6 +282,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 					value={localQA.answer}
 					onChange={onAnswerChanged}
 				/>
+				<div className="word-count-overlay"># words: {wordCount}</div>
 			</div>
 		</div>
 	);

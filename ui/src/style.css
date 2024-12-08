@@ -3,7 +3,7 @@
 	font-family: 'Raleway';
 	font-style: normal;
 	font-weight: 400;
-	src: url('fonts/raleway-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
+	src: url('../public/fonts/raleway-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
 }
 
 @font-face {
@@ -11,7 +11,7 @@
 	font-family: 'Noto Sans';
 	font-style: normal;
 	font-weight: 400;
-	src: url('fonts/noto-sans-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
+	src: url('../public/fonts/noto-sans-v28-latin-regular.woff2') format('woff2'); /* Chrome 36+, Opera 23+, Firefox 39+, Safari 12+, iOS 10+ */
 }
 
 body, html {
@@ -760,6 +760,17 @@ li p {
 	font-size: 1em;
 	background-color: #3f3f3f;
 	color: #f0f0f0;
+}
+
+.vqaEditor .word-count-overlay {
+	position: absolute;
+	bottom: 10px;
+	right: 10px;
+	background-color: rgba(0, 0, 0, 0.2);
+	color: #f0f0f0;
+	padding: 3px;
+	border-radius: 5px;
+	font-size: 0.9em;
 }
 
 

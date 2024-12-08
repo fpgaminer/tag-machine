@@ -107,8 +107,7 @@ class TagMachineAPI:
 		Add an attribute to an image. Returns False if the attribute already exists.
 		"""
 		id_str = id.hex() if isinstance(id, bytes) else str(id)
-		singular_str = 'true' if singular else 'false'
-		r = self.session.post(f'{self.url}/api/images/{id_str}/attributes/{key}/{value}/{singular_str}')
+		r = self.session.post(f'{self.url}/api/images/{id_str}/attributes', json={'key': key, 'value': value, 'singular': singular})
 		if r.status_code == 409:
 			return False
 		r.raise_for_status()
@@ -119,7 +118,7 @@ class TagMachineAPI:
 		Remove an attribute from an image.
 		"""
 		id_str = id.hex() if isinstance(id, bytes) else str(id)
-		r = self.session.delete(f'{self.url}/api/images/{id_str}/attributes/{key}/{value}')
+		r = self.session.delete(f'{self.url}/api/images/{id_str}/attributes', json={'key': key, 'value': value})
 		r.raise_for_status()
 	
 	# def fetch_logs(self, image_hash: bytes | None = None, action: str | None = None) -> list[DBLog]:
@@ -176,7 +175,6 @@ def parse_search_response(response: SearchResultResponse) -> np.ndarray | list[b
 	assert data is not None
 	response_type = response.DataType()
 
-	# Don't handle other response types yet
 	if response_type == ResponseType.IDResponse:
 		result = IDResponse()
 		result.Init(data.Bytes, data.Pos)
