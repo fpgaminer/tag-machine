@@ -149,7 +149,13 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	async function onCustom2Clicked() {
 		setIsCustom2Loading(true);
 
-		for await (const response of doCustom(imageId, "answers", localQA.question, 5052)) {
+		for await (const response of doCustom(
+			imageId,
+			"answers",
+			localQA.question,
+			5052,
+			"You are a helpful image assistant.",
+		)) {
 			if (response === null) {
 				return;
 			}
@@ -436,7 +442,13 @@ async function doGemini(
 	}
 }
 
-async function* doCustom(image_id: number, model: string, prompt: string, port: number = 5048): AsyncGenerator<string> {
+async function* doCustom(
+	image_id: number,
+	model: string,
+	prompt: string,
+	port: number = 5048,
+	system_message: string = "You are a helpful image captioner.",
+): AsyncGenerator<string> {
 	const client = new OpenAI({
 		apiKey: "fungal",
 		baseURL: `http://127.0.0.1:${port}/v1`,
@@ -450,7 +462,7 @@ async function* doCustom(image_id: number, model: string, prompt: string, port: 
 			messages: [
 				{
 					role: "system",
-					content: "You are a helpful image captioner.",
+					content: system_message,
 				},
 				{
 					role: "user",

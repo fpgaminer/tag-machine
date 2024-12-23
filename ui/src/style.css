@@ -348,6 +348,10 @@ li p {
 	padding: 10px;
 }
 
+.image-info-attribute-value {
+	white-space: pre-wrap;
+}
+
 .image-info-attribute-name {
 	font-weight: bold;
 	display: flex;
