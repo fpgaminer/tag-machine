@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useRef, useMemo } from "react";
+import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
@@ -40,7 +40,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const isUnsaved =
 		localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer || qaCategory !== imageCategory;
 
-	async function handleSave() {
+	const handleSave = useCallback(async () => {
 		if (localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer) {
 			await addImageAttribute(imageId, "questionAnswer", JSON.stringify(localQA), true);
 		}
@@ -51,7 +51,21 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 		// Clear the local storage
 		clearLocalStorageVQA(imageId);
-	}
+	}, [localQA, parsedQA, qaCategory, imageCategory, imageId]);
+
+	// Listen for save shortcut
+	useEffect(() => {
+		const handleKeyDown = (e: KeyboardEvent) => {
+			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
+				e.preventDefault();
+				void handleSave();
+			}
+		};
+		window.addEventListener("keydown", handleKeyDown);
+		return () => {
+			window.removeEventListener("keydown", handleKeyDown);
+		};
+	}, [handleSave]);
 
 	function onRevertClicked() {
 		// Revert to the server's version of the question and answer
@@ -151,10 +165,14 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 		for await (const response of doCustom(
 			imageId,
-			"answers",
+			//"answers",
+			"kiqxrbng",
 			localQA.question,
-			5052,
-			"You are a helpful image assistant.",
+			5053, //5052,
+			//"You are a helpful image assistant.",
+			//"You are JoyCaption, a helpful AI assistant with vision capabilities.",
+			"You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
+			0.6,
 		)) {
 			if (response === null) {
 				return;
@@ -209,6 +227,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		);
 
 		setQACategory(response.trim());
+	}
+
+	function handleEscape(e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
+		if (e.key === "Escape") {
+			(e.target as HTMLInputElement | HTMLTextAreaElement).blur();
+		}
 	}
 
 	return (
@@ -272,6 +296,8 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						value={qaCategory}
 						onChange={(e) => setQACategory(e.target.value)}
 						type="text"
+						onKeyDown={handleEscape}
+						tabIndex={1}
 					/>
 					<button
 						className="ai-suggest-button"
@@ -281,12 +307,20 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						<Icon icon={magicwand24Filled} />
 					</button>
 				</div>
-				<textarea placeholder="Enter your question" value={localQA.question} onChange={onQuestionChanged} />
+				<textarea
+					placeholder="Enter your question"
+					value={localQA.question}
+					onChange={onQuestionChanged}
+					onKeyDown={handleEscape}
+					tabIndex={2}
+				/>
 				<textarea
 					ref={answerTextareaRef}
 					placeholder="Enter the answer"
 					value={localQA.answer}
 					onChange={onAnswerChanged}
+					onKeyDown={handleEscape}
+					tabIndex={3}
 				/>
 				<div className="word-count-overlay"># words: {wordCount}</div>
 			</div>
@@ -448,6 +482,7 @@ async function* doCustom(
 	prompt: string,
 	port: number = 5048,
 	system_message: string = "You are a helpful image captioner.",
+	temperature: number = 1.0,
 ): AsyncGenerator<string> {
 	const client = new OpenAI({
 		apiKey: "fungal",
@@ -468,21 +503,21 @@ async function* doCustom(
 					role: "user",
 					content: [
 						{
+							type: "text",
+							text: prompt,
+						},
+						{
 							type: "image_url",
 							image_url: {
 								url: dataUrl,
 							},
-						},
-						{
-							type: "text",
-							text: prompt,
 						},
 					],
 				},
 			],
 			stream: true,
 			top_p: 0.9,
-			temperature: 1.0,
+			temperature: temperature,
 			max_tokens: 1024,
 		});
 

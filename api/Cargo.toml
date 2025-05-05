@@ -1,0 +1,12 @@
+[package]
+name = "parse"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "parse"
+crate-type = ["cdylib"]
+
+[dependencies]
+pyo3 = { version = "0.24.0", features = ["extension-module"] }
+byteorder = "1.5"

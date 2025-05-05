@@ -14,6 +14,7 @@ import UserPopup from "./UserPopup";
 import VQAAIConfigPopup from "./VQAAIConfigPopup";
 import { WikiPopup } from "./WikiPopup";
 import UploadPopup from "./UploadPopup";
+import BoundingBoxMode from "./BoundingBoxMode";
 
 function App() {
 	const windowStateState = windowState.state;
@@ -54,6 +55,7 @@ function App() {
 					{windowStateState === WindowStates.Vqa ? <VQAMode /> : null}
 					{windowStateState === WindowStates.Register ? <RegisterWindow /> : null}
 					{windowStateState === WindowStates.VqaTasks ? <VQATaskMode /> : null}
+					{windowStateState === WindowStates.BoundingBox ? <BoundingBoxMode /> : null}
 				</div>
 			</div>
 		</div>

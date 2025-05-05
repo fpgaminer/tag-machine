@@ -159,6 +159,7 @@ export enum WindowStates {
 	Vqa = "vqa",
 	Register = "register",
 	VqaTasks = "vqa-tasks",
+	BoundingBox = "bounding-box",
 }
 
 class WindowState {

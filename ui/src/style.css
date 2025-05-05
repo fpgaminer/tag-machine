@@ -167,6 +167,21 @@ body, html {
 	color: #f0f0f0;
 }
 
+.image-display .bounding-box {
+	position: absolute;
+	outline: 1px solid rgba(255, 0, 0, 0.5);
+	box-sizing: border-box;
+	pointer-events: auto;
+}
+
+.image-display .resize-handle {
+	position: absolute;
+	width: 10px;
+	height: 10px;
+	background-color: rgba(0, 0, 0, 0);
+	border-radius: 50%;
+}
+
 
 /* Image Controls */
 .image-controls {
@@ -196,6 +211,10 @@ body, html {
 
 .image-controls .current-id-input {
 	width: 6em;
+}
+
+.image-controls .control-separator {
+	width: 40px;
 }
 
 
@@ -1342,4 +1361,8 @@ li p {
 
 .category-input-container input {
 	width: 100%;
+}
+
+.icon-red {
+	color: #ff4b4b;
 }

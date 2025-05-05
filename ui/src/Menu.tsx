@@ -117,6 +117,7 @@ function Menu() {
 					<option value={WindowStates.Captioning}>Captioning Mode</option>
 					<option value={WindowStates.Vqa}>VQA Mode</option>
 					<option value={WindowStates.VqaTasks}>VQA Task Mode</option>
+					<option value={WindowStates.BoundingBox}>Bounding Box Mode</option>
 				</select>
 			</div>
 			<div className="menu-item">

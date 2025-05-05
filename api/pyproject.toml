@@ -2,5 +2,11 @@
 requires = [
 	"setuptools >= 48",
 	"wheel",
+	"setuptools-rust >= 1.0"
 ]
 build-backend = "setuptools.build_meta"
+
+[[tool.setuptools-rust.ext-modules]]
+target = "tag_machine_api.parse"
+path = "Cargo.toml"
+binding = "PyO3"

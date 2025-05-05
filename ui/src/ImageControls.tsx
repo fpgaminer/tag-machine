@@ -7,8 +7,13 @@ import { useEffect, useRef, useState } from "react";
 import { imageListState } from "./state/ImageList";
 import { currentImageState } from "./state/CurrentImage";
 import { errorMessageState } from "./state";
+import React from "react";
 
-function ImageControls() {
+interface ImageControlsProps {
+	children?: React.ReactNode;
+}
+
+function ImageControls({ children }: ImageControlsProps) {
 	const [isEditing, setIsEditing] = useState(false);
 	const [editedIndex, setEditedIndex] = useState("");
 	const currentIndex = currentImageState.searchIndex ?? -1;
@@ -88,7 +93,12 @@ function ImageControls() {
 
 	useEffect(() => {
 		const handleKeyDown = (event: KeyboardEvent) => {
-			if (event.target !== document.body) {
+			const activeElement = document.activeElement as HTMLElement | null;
+			const isTyping =
+				activeElement &&
+				(activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable);
+
+			if (isTyping) {
 				return;
 			}
 
@@ -136,13 +146,14 @@ function ImageControls() {
 			</div>
 			<div className="center column remainingSpace"></div>
 			<div className="right-side row contentBased">
+				{children}
 				<div className="control">
-					<button className="control-button" onClick={onPrevClicked}>
+					<button className="control-button" onClick={onPrevClicked} title="Previous image">
 						<Icon icon={chevronLeft24Filled} className="icon" width="24" />
 					</button>
 				</div>
 				<div className="control">
-					<button className="control-button" onClick={onNextClicked}>
+					<button className="control-button" onClick={onNextClicked} title="Next image">
 						<Icon icon={chevronRight24Filled} className="icon" width="24" />
 					</button>
 				</div>

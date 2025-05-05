@@ -1,10 +1,4 @@
-import { ByteBuffer } from "flatbuffers";
 import { authState } from "./state/Auth";
-import { SearchResultResponse } from "./tag-storm-db-types/search-result-response";
-import { ResponseType } from "./tag-storm-db-types/response-type";
-import { IDResponse } from "./tag-storm-db-types/idresponse";
-import { HashResponse } from "./tag-storm-db-types/hash-response";
-import { ImageResponse } from "./tag-storm-db-types/image-response";
 
 export const API_URL = "/api";
 
@@ -132,7 +126,7 @@ export async function searchImages(
 	select: SearchSelect[],
 	limit: number | null,
 	query: string,
-): Promise<Uint32Array | HashResponse | ImageResponse> {
+): Promise<Uint32Array | Uint8Array[]> {
 	// Combine select into a comma-separated string
 	const selectString = select.join(",");
 
@@ -149,26 +143,36 @@ export async function searchImages(
 	}
 
 	const arrayBuffer = await response.arrayBuffer();
-	const byteBuffer = new ByteBuffer(new Uint8Array(arrayBuffer));
-	const searchResults = SearchResultResponse.getRootAsSearchResultResponse(byteBuffer);
-	const responseType = searchResults.dataType();
+	const uint8Buffer = new Uint8Array(arrayBuffer);
 
-	switch (responseType) {
-		case ResponseType.IDResponse: {
-			const idResponse = searchResults.data(new IDResponse()) as IDResponse;
-			return idResponse.idsArray()!;
-		}
-		case ResponseType.HashResponse: {
-			const hashResponse = searchResults.data(new HashResponse()) as HashResponse;
-			return hashResponse;
-		}
-		case ResponseType.ImageResponse: {
-			const imageResponse = searchResults.data(new ImageResponse()) as ImageResponse;
-			return imageResponse;
-		}
+	// Make sure the first 3 bytes equal "TMS" (the magic number for the SearchResultResponse)
+	if (uint8Buffer[0] !== 0x54 || uint8Buffer[1] !== 0x4d || uint8Buffer[2] !== 0x53) {
+		throw new Error("Invalid response format");
 	}
 
-	throw new Error(`Unknown response type: ${responseType}`);
+	const bitFlags = uint8Buffer[3];
+	const has_ids = (bitFlags & (1 << 3)) !== 0; // 0b00001000
+	const has_hashes = (bitFlags & (1 << 2)) !== 0; // 0b00000100
+	const has_tags = (bitFlags & (1 << 1)) !== 0; // 0b00000010
+	const has_attributes = (bitFlags & (1 << 0)) !== 0; // 0b00000001
+
+	if (has_ids && !has_hashes && !has_tags && !has_attributes) {
+		// If we only have IDs, we can return them as a Uint32Array
+		return new Uint32Array(uint8Buffer.buffer, 4, (uint8Buffer.byteLength - 4) / 4);
+	}
+
+	if (has_hashes && !has_ids && !has_tags && !has_attributes) {
+		// If we only have hashes, we can return them as an array of Uint8Arrays
+		const numberOfHashes = (uint8Buffer.byteLength - 4) / 32;
+		const hashes: Uint8Array[] = Array.from({ length: numberOfHashes }, (_, i) =>
+			uint8Buffer.subarray(4 + i * 32, 4 + (i + 1) * 32),
+		);
+
+		return hashes;
+	}
+
+	// TODO: Implement support for images responses
+	throw new Error("Unsupported search result format");
 }
 
 export async function getImageMetadata(identifier: number | string): Promise<ApiImage | null> {
@@ -215,12 +219,17 @@ export async function addImageAttribute(
 	value: string,
 	singular: boolean,
 ): Promise<void> {
-	const response = await authenticatedFetch(
-		`${API_URL}/images/${image}/attributes/${encodeURIComponent(key)}/${encodeURIComponent(value)}/${singular}`,
-		{
-			method: "POST",
+	const response = await authenticatedFetch(`${API_URL}/images/${image}/attributes`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
 		},
-	);
+		body: JSON.stringify({
+			key,
+			value,
+			singular,
+		}),
+	});
 
 	if (!response.ok) {
 		throw new HttpError(response.status, `Failed to add image attribute: ${response.status}: ${await response.text()}`);
