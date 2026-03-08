@@ -14,7 +14,7 @@ from PIL import Image
 import torchvision.transforms.functional as TF
 import concurrent.futures
 import argparse
-from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModel
+from transformers import AutoTokenizer, AutoModelForCausalLM, AutoProcessor, AutoModel, LlavaForConditionalGeneration
 from torch import nn
 import yaml
 import io
@@ -40,7 +40,8 @@ parser.add_argument('--tag-assoc-model', type=str, default='tag_assoc_models/5kc
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9i6xt5iz-49920')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-1zjx0z2i-499968')
 #parser.add_argument('--vlm-model', type=str, default='models/joy-caption-rx4ifbpo-499968')
-parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9em124t2-499968')
+#parser.add_argument('--vlm-model', type=str, default='models/joy-caption-9em124t2-499968')
+parser.add_argument('--vlm-model', type=str, default="fancyfeast/llama-joycaption-beta-one-hf-llava")
 
 
 IMAGE_DIR = Path('../rust-api/images')
@@ -109,171 +110,210 @@ def load_tag_assoc_model(model_path: Path):
 	return model, tag_to_id, id_to_tag
 
 
-class ImageAdapter(nn.Module):
-	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool):
-		super().__init__()
-		self.deep_extract = deep_extract
+# class ImageAdapter(nn.Module):
+# 	def __init__(self, input_features: int, output_features: int, ln1: bool, pos_emb: bool, num_image_tokens: int, deep_extract: bool):
+# 		super().__init__()
+# 		self.deep_extract = deep_extract
 
-		if self.deep_extract:
-			input_features = input_features * 5
+# 		if self.deep_extract:
+# 			input_features = input_features * 5
 
-		self.linear1 = nn.Linear(input_features, output_features)
-		self.activation = nn.GELU()
-		self.linear2 = nn.Linear(output_features, output_features)
-		self.ln1 = nn.Identity() if not ln1 else nn.LayerNorm(input_features)
-		self.pos_emb = None if not pos_emb else nn.Parameter(torch.zeros(num_image_tokens, input_features))
+# 		self.linear1 = nn.Linear(input_features, output_features)
+# 		self.activation = nn.GELU()
+# 		self.linear2 = nn.Linear(output_features, output_features)
+# 		self.ln1 = nn.Identity() if not ln1 else nn.LayerNorm(input_features)
+# 		self.pos_emb = None if not pos_emb else nn.Parameter(torch.zeros(num_image_tokens, input_features))
 
-		# Mode token
-		#self.mode_token = nn.Embedding(n_modes, output_features)
-		#self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
+# 		# Mode token
+# 		#self.mode_token = nn.Embedding(n_modes, output_features)
+# 		#self.mode_token.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
 
-		# Other tokens (<|image_start|>, <|image_end|>, <|eot_id|>)
-		self.other_tokens = nn.Embedding(3, output_features)
-		self.other_tokens.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
+# 		# Other tokens (<|image_start|>, <|image_end|>, <|eot_id|>)
+# 		self.other_tokens = nn.Embedding(3, output_features)
+# 		self.other_tokens.weight.data.normal_(mean=0.0, std=0.02)   # Matches HF's implementation of llama3
 
-	def forward(self, vision_outputs: torch.Tensor):
-		if self.deep_extract:
-			x = torch.concat((
-				vision_outputs[-2],
-				vision_outputs[3],
-				vision_outputs[7],
-				vision_outputs[13],
-				vision_outputs[20],
-			), dim=-1)
-			assert len(x.shape) == 3, f"Expected 3, got {len(x.shape)}"  # batch, tokens, features
-			assert x.shape[-1] == vision_outputs[-2].shape[-1] * 5, f"Expected {vision_outputs[-2].shape[-1] * 5}, got {x.shape[-1]}"
-		else:
-			x = vision_outputs[-2]
+# 	def forward(self, vision_outputs: torch.Tensor):
+# 		if self.deep_extract:
+# 			x = torch.concat((
+# 				vision_outputs[-2],
+# 				vision_outputs[3],
+# 				vision_outputs[7],
+# 				vision_outputs[13],
+# 				vision_outputs[20],
+# 			), dim=-1)
+# 			assert len(x.shape) == 3, f"Expected 3, got {len(x.shape)}"  # batch, tokens, features
+# 			assert x.shape[-1] == vision_outputs[-2].shape[-1] * 5, f"Expected {vision_outputs[-2].shape[-1] * 5}, got {x.shape[-1]}"
+# 		else:
+# 			x = vision_outputs[-2]
 
-		x = self.ln1(x)
+# 		x = self.ln1(x)
 
-		if self.pos_emb is not None:
-			assert x.shape[-2:] == self.pos_emb.shape, f"Expected {self.pos_emb.shape}, got {x.shape[-2:]}"
-			x = x + self.pos_emb
+# 		if self.pos_emb is not None:
+# 			assert x.shape[-2:] == self.pos_emb.shape, f"Expected {self.pos_emb.shape}, got {x.shape[-2:]}"
+# 			x = x + self.pos_emb
 
-		x = self.linear1(x)
-		x = self.activation(x)
-		x = self.linear2(x)
+# 		x = self.linear1(x)
+# 		x = self.activation(x)
+# 		x = self.linear2(x)
 
-		# Mode token
-		#mode_token = self.mode_token(mode)
-		#assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
-		#x = torch.cat((x, mode_token), dim=1)
+# 		# Mode token
+# 		#mode_token = self.mode_token(mode)
+# 		#assert mode_token.shape == (x.shape[0], mode_token.shape[1], x.shape[2]), f"Expected {(x.shape[0], 1, x.shape[2])}, got {mode_token.shape}"
+# 		#x = torch.cat((x, mode_token), dim=1)
 
-		# <|image_start|>, IMAGE, <|image_end|>, <|eot_id|>
-		# The <|eot_id|> token will be moved around and injected later
-		other_tokens = self.other_tokens(torch.tensor([0, 1], device=self.other_tokens.weight.device).expand(x.shape[0], -1))
-		assert other_tokens.shape == (x.shape[0], 2, x.shape[2]), f"Expected {(x.shape[0], 2, x.shape[2])}, got {other_tokens.shape}"
-		x = torch.cat((other_tokens[:, 0:1], x, other_tokens[:, 1:2]), dim=1)
+# 		# <|image_start|>, IMAGE, <|image_end|>, <|eot_id|>
+# 		# The <|eot_id|> token will be moved around and injected later
+# 		other_tokens = self.other_tokens(torch.tensor([0, 1], device=self.other_tokens.weight.device).expand(x.shape[0], -1))
+# 		assert other_tokens.shape == (x.shape[0], 2, x.shape[2]), f"Expected {(x.shape[0], 2, x.shape[2])}, got {other_tokens.shape}"
+# 		x = torch.cat((other_tokens[:, 0:1], x, other_tokens[:, 1:2]), dim=1)
 
-		return x
+# 		return x
 
-	def get_eot_embedding(self):
-		return self.other_tokens(torch.tensor([2], device=self.other_tokens.weight.device)).squeeze(0)
+# 	def get_eot_embedding(self):
+# 		return self.other_tokens(torch.tensor([2], device=self.other_tokens.weight.device)).squeeze(0)
 
 
 def load_vlm_model(model_path: Path):
 	"""
 	Load the VLM model.
 	"""
-	config = yaml.safe_load((model_path / "config.yaml").read_text())
+	processor = AutoProcessor.from_pretrained(model_path)
+	llava_model = LlavaForConditionalGeneration.from_pretrained(model_path, torch_dtype="bfloat16", device_map='cuda')
+	llava_model.eval()
 
-	tokenizer = AutoTokenizer.from_pretrained(config['text_model'])
-	if (model_path / "text_model").exists():
-		logging.info("Loading VLM's custom text model")
-		text_model = AutoModelForCausalLM.from_pretrained(model_path / "text_model", device_map='cuda', torch_dtype=torch.bfloat16)
-	else:
-		text_model = AutoModelForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
-	#assert isinstance(text_model, LlamaForCausalLM)
-	text_model.eval()
-	#text_model.forward = torch.compile(text_model.forward, mode="reduce-overhead", fullgraph=True)
+	return processor, llava_model
 
-	clip_processor = AutoProcessor.from_pretrained(config['clip_model'])
-	clip_model = AutoModel.from_pretrained(config['clip_model'])
-	clip_model = clip_model.vision_model
-	if (Path(model_path) / "vision_model.pt").exists():
-		logging.info("Loading VLM's custom vision model")
-		checkpoint = torch.load(Path(model_path) / "vision_model.pt", map_location='cpu')
-		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
-		clip_model.load_state_dict(checkpoint)
-		del checkpoint
-	elif (Path(model_path) / "clip_model.pt").exists():
-		logging.info("Loading VLM's custom vision model")
-		checkpoint = torch.load(Path(model_path) / "clip_model.pt", map_location='cpu')
-		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
-		clip_model.load_state_dict(checkpoint)
-		del checkpoint
 
-	clip_model.eval()
-	clip_model.requires_grad_(False)
-	clip_model.to('cuda')
+# def load_vlm_model(model_path: Path):
+# 	"""
+# 	Load the VLM model.
+# 	"""
+# 	config = yaml.safe_load((model_path / "config.yaml").read_text())
 
-	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False)#, n_modes=3*7)
-	checkpoint = torch.load(Path(model_path) / "image_adapter.pt", map_location='cpu')
-	image_adapter.load_state_dict(checkpoint)
-	image_adapter.eval()
-	image_adapter.to('cuda')
+# 	tokenizer = AutoTokenizer.from_pretrained(config['text_model'])
+# 	if (model_path / "text_model").exists():
+# 		logging.info("Loading VLM's custom text model")
+# 		text_model = AutoModelForCausalLM.from_pretrained(model_path / "text_model", device_map='cuda', torch_dtype=torch.bfloat16)
+# 	else:
+# 		text_model = AutoModelForCausalLM.from_pretrained(config['text_model'], device_map='cuda', torch_dtype=torch.bfloat16)
+# 	#assert isinstance(text_model, LlamaForCausalLM)
+# 	text_model.eval()
+# 	#text_model.forward = torch.compile(text_model.forward, mode="reduce-overhead", fullgraph=True)
 
-	return tokenizer, text_model, clip_processor, clip_model, image_adapter
+# 	clip_processor = AutoProcessor.from_pretrained(config['clip_model'])
+# 	clip_model = AutoModel.from_pretrained(config['clip_model'])
+# 	clip_model = clip_model.vision_model
+# 	if (Path(model_path) / "vision_model.pt").exists():
+# 		logging.info("Loading VLM's custom vision model")
+# 		checkpoint = torch.load(Path(model_path) / "vision_model.pt", map_location='cpu')
+# 		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
+# 		clip_model.load_state_dict(checkpoint)
+# 		del checkpoint
+# 	elif (Path(model_path) / "clip_model.pt").exists():
+# 		logging.info("Loading VLM's custom vision model")
+# 		checkpoint = torch.load(Path(model_path) / "clip_model.pt", map_location='cpu')
+# 		checkpoint = {k.replace("_orig_mod.module.", ""): v for k, v in checkpoint.items()}
+# 		clip_model.load_state_dict(checkpoint)
+# 		del checkpoint
+
+# 	clip_model.eval()
+# 	clip_model.requires_grad_(False)
+# 	clip_model.to('cuda')
+
+# 	image_adapter = ImageAdapter(clip_model.config.hidden_size, text_model.config.hidden_size, ln1=False, pos_emb=False, num_image_tokens=1, deep_extract=False)#, n_modes=3*7)
+# 	checkpoint = torch.load(Path(model_path) / "image_adapter.pt", map_location='cpu')
+# 	image_adapter.load_state_dict(checkpoint)
+# 	image_adapter.eval()
+# 	image_adapter.to('cuda')
+
+# 	return tokenizer, text_model, clip_processor, clip_model, image_adapter
 
 
 @torch.no_grad()
-def run_vlm_model(prompt_str: str, tokenizer, text_model, clip_processor, clip_model, image_adapter, image: Image.Image) -> str:
-	image = image.resize((384, 384), Image.LANCZOS)
-	pixel_values = TF.pil_to_tensor(image).unsqueeze(0) / 255.0
-	pixel_values = TF.normalize(pixel_values, [0.5], [0.5])
+def run_vlm_model(prompt_str: str, processor, text_model: LlavaForConditionalGeneration, image: Image.Image) -> str:
+	#image = image.resize((384, 384), Image.LANCZOS)
+	#pixel_values = TF.pil_to_tensor(image).unsqueeze(0) / 255.0
+	#pixel_values = TF.normalize(pixel_values, [0.5], [0.5])
 	#image = clip_processor(images=image.convert('RGB'), return_tensors='pt').pixel_values
-	pixel_values = pixel_values.to('cuda')
+	#pixel_values = pixel_values.to('cuda')
 
-	prompt = tokenizer.encode(prompt_str, return_tensors='pt', padding=False, truncation=False, add_special_tokens=False)
+	convo = [
+		{
+			"role": "system",
+			"content": "You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
+		},
+		{
+			"role": "user",
+			"content": prompt_str.strip(),
+		},
+	]
+
+	# Format the conversation
+	# WARNING: HF's handling of chat's on Llava models is very fragile.  This specific combination of processor.apply_chat_template(), and processor() works
+	# but if using other combinations always inspect the final input_ids to ensure they are correct.  Often times you will end up with multiple <bos> tokens
+	# if not careful, which can make the model perform poorly.
+	convo_string = processor.apply_chat_template(convo, tokenize = False, add_generation_prompt = True)
+	assert isinstance(convo_string, str)
+
+	# Process the inputs
+	inputs = processor(text=[convo_string], images=[image], return_tensors="pt").to('cuda')
+	inputs['pixel_values'] = inputs['pixel_values'].to(torch.bfloat16)
+
+	#prompt = tokenizer.encode(prompt_str, return_tensors='pt', padding=False, truncation=False, add_special_tokens=False)
 
 	# Embed image
-	with torch.amp.autocast_mode.autocast('cuda', enabled=True):
-		vision_outputs = clip_model(pixel_values=pixel_values, output_hidden_states=True)
-		image_features = vision_outputs.hidden_states
-		embedded_images = image_adapter(image_features)
-		#embedded_images = image_adapter(image_features, torch.tensor([7,8,9,10,11,12,13], device='cuda').unsqueeze(0))
-		embedded_images = embedded_images.to('cuda')
+	#with torch.amp.autocast_mode.autocast('cuda', enabled=True):
+	#	vision_outputs = clip_model(pixel_values=pixel_values, output_hidden_states=True)
+	#	image_features = vision_outputs.hidden_states
+	#	embedded_images = image_adapter(image_features)
+	#	#embedded_images = image_adapter(image_features, torch.tensor([7,8,9,10,11,12,13], device='cuda').unsqueeze(0))
+	#	embedded_images = embedded_images.to('cuda')
 
 	# Embed prompt
-	prompt_embeds = text_model.model.embed_tokens(prompt.to('cuda'))
-	assert prompt_embeds.shape == (1, prompt.shape[1], text_model.config.hidden_size), f"Prompt shape is {prompt_embeds.shape}, expected {(1, prompt.shape[1], text_model.config.hidden_size)}"
-	embedded_bos = text_model.model.embed_tokens(torch.tensor([[tokenizer.bos_token_id]], device=text_model.device, dtype=torch.int64))
-	eot_embed = image_adapter.get_eot_embedding().unsqueeze(0).to(dtype=text_model.dtype)
+	#prompt_embeds = text_model.model.embed_tokens(prompt.to('cuda'))
+	#assert prompt_embeds.shape == (1, prompt.shape[1], text_model.config.hidden_size), f"Prompt shape is {prompt_embeds.shape}, expected {(1, prompt.shape[1], text_model.config.hidden_size)}"
+	#embedded_bos = text_model.model.embed_tokens(torch.tensor([[tokenizer.bos_token_id]], device=text_model.device, dtype=torch.int64))
+	#eot_embed = image_adapter.get_eot_embedding().unsqueeze(0).to(dtype=text_model.dtype)
 
 	# Construct prompts
-	inputs_embeds = torch.cat([
-		embedded_bos.expand(embedded_images.shape[0], -1, -1),
-		embedded_images.to(dtype=embedded_bos.dtype),
-		prompt_embeds.expand(embedded_images.shape[0], -1, -1),
-		eot_embed.expand(embedded_images.shape[0], -1, -1),
-	], dim=1)
+	#inputs_embeds = torch.cat([
+	#	embedded_bos.expand(embedded_images.shape[0], -1, -1),
+	#	embedded_images.to(dtype=embedded_bos.dtype),
+	#	prompt_embeds.expand(embedded_images.shape[0], -1, -1),
+	#	eot_embed.expand(embedded_images.shape[0], -1, -1),
+	#], dim=1)
 
 	#generated_captions = []
 
-	input_ids = torch.cat([
-		torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long),
-		torch.zeros((1, embedded_images.shape[1]), dtype=torch.long),
-		prompt,
-		torch.tensor([[tokenizer.convert_tokens_to_ids("<|eot_id|>")]], dtype=torch.long),
-	], dim=1).to('cuda')
-	attention_mask = torch.ones_like(input_ids)
-	print(input_ids)
+	# input_ids = torch.cat([
+	# 	torch.tensor([[tokenizer.bos_token_id]], dtype=torch.long),
+	# 	torch.zeros((1, embedded_images.shape[1]), dtype=torch.long),
+	# 	prompt,
+	# 	torch.tensor([[tokenizer.convert_tokens_to_ids("<|eot_id|>")]], dtype=torch.long),
+	# ], dim=1).to('cuda')
+	# attention_mask = torch.ones_like(input_ids)
+	# print(input_ids)
 
 	#generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=False, suppress_tokens=None)
 	#generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, top_k=10, temperature=0.2, suppress_tokens=None)
-	generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, suppress_tokens=None)   # Uses the default which is temp=0.6, top_p=0.9
+	#generate_ids = text_model.generate(input_ids, inputs_embeds=inputs_embeds, attention_mask=attention_mask, max_new_tokens=256, do_sample=True, suppress_tokens=None)   # Uses the default which is temp=0.6, top_p=0.9
+	generate_ids = text_model.generate(**inputs, max_new_tokens=512, do_sample=True, suppress_tokens=None, use_cache=True, temperature=0.6, top_p=0.9, top_k=None)[0]
 
 	# Trim off the prompt
-	generate_ids = generate_ids[:, input_ids.shape[1]:]
-	#print(generate_ids)
-	if generate_ids[0][-1] == tokenizer.eos_token_id or generate_ids[0][-1] == tokenizer.convert_tokens_to_ids("<|eot_id|>"):
-		generate_ids = generate_ids[:, :-1]
+	generate_ids = generate_ids[inputs['input_ids'].shape[1]:]
 
-	caption = tokenizer.batch_decode(generate_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)[0]
+	# Decode
+	caption = processor.tokenizer.decode(generate_ids, skip_special_tokens=True, clean_up_tokenization_spaces=False)
+	caption = caption.strip()
 
 	return caption
+	#print(generate_ids)
+	#if generate_ids[0][-1] == tokenizer.eos_token_id or generate_ids[0][-1] == tokenizer.convert_tokens_to_ids("<|eot_id|>"):
+	#	generate_ids = generate_ids[:, :-1]
 
+	#caption = tokenizer.batch_decode(generate_ids, skip_special_tokens=False, clean_up_tokenization_spaces=False)[0]
+
+	#return caption
 
 
 @app.route('/predict', methods=['POST'])
@@ -396,8 +436,8 @@ def captioning_worker(job: ImageCaptioningJob):
 	image = job.image
 
 	try:
-		tokenizer, text_model, clip_processor, clip_model, image_adapter = thread_local.vlm_model
-		caption = run_vlm_model(job.prompt, tokenizer, text_model, clip_processor, clip_model, image_adapter, image)
+		processor, text_model = thread_local.vlm_model
+		caption = run_vlm_model(job.prompt, processor, text_model, image)
 	except Exception as e:
 		logging.error(f'Captioning failed: {e}')
 		return None
