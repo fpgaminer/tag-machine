@@ -50,7 +50,6 @@ autorun(
 		try {
 			associations = await api.getTagImageAssociations(tags, currentImageHash);
 		} catch (error) {
-			console.log("Error fetching tag associations:", error);
 			// Check if it's a 502 error
 			if (error instanceof api.HttpError && error.statusCode === 502) {
 				console.log("Eating error");
@@ -60,6 +59,7 @@ autorun(
 				});
 				return;
 			}
+			console.log("Error fetching tag associations:", error);
 
 			errorMessageState.setErrorMessage(`Error fetching tag associations: ${error as string}`);
 			return;

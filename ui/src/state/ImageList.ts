@@ -76,13 +76,12 @@ class ImageListState {
 				if (result instanceof Uint32Array) {
 					searchResultIds = result;
 				} else {
-					throw Error(`Unexpected search result type: ${result}`);
+					throw Error(`Unexpected search result type: ${typeof result}`);
 				}
 			}
 		} catch (error) {
-			runInAction(() => {
-				errorMessageState.setErrorMessage(`Error performing search: ${error as string}`);
-			});
+			const errorMessage = error instanceof Error ? error.message : String(error);
+			errorMessageState.setErrorMessage(`Error performing search: ${errorMessage}`);
 			return;
 		}
 

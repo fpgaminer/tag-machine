@@ -1,4 +1,4 @@
-import { makeAutoObservable, runInAction } from "mobx";
+import { makeAutoObservable, reaction, runInAction } from "mobx";
 import { ImageObject, Tag, TagSuggestion, errorMessageState, fetchTagSuggestions } from "../state";
 import { imageListState } from "./ImageList";
 import { tagListState } from "./TagList";
@@ -10,9 +10,37 @@ export class CurrentImageState {
 	suggestedTags: TagSuggestion[] | null = null;
 	suggestedTagsInFlight = false;
 	serverDown: boolean = false;
+	private persistDisposer: (() => void) | null = null;
 
 	constructor() {
 		makeAutoObservable(this);
+	}
+
+	// New method to initialize reactions after all modules are loaded
+	initializeReactions() {
+		if (this.persistDisposer) {
+			// Already initialized
+			return;
+		}
+
+		this.persistDisposer = reaction(
+			() => ({
+				id: this._imageId,
+				search: imageListState.currentSearch,
+			}),
+			({ id, search }) => {
+				if (id === null) {
+					localStorage.setItem("currentImageId", "");
+				} else {
+					localStorage.setItem("currentImageId", String(id));
+
+					const map = JSON.parse(localStorage.getItem("currentImageIdForSearch") ?? "{}") as Record<string, string>;
+					map[search] = String(id);
+					localStorage.setItem("currentImageIdForSearch", JSON.stringify(map));
+				}
+			},
+			{ delay: 100 },
+		);
 	}
 
 	get imageId(): number | null {
@@ -28,25 +56,10 @@ export class CurrentImageState {
 	}
 
 	set imageId(image_id: number | null) {
-		const imageChanged = this._imageId != image_id;
-
-		if (image_id === null) {
-			localStorage.setItem("currentImageId", "");
-		} else {
-			localStorage.setItem("currentImageId", image_id.toString());
-
-			const currentImageIdForSearch = JSON.parse(localStorage.getItem("currentImageIdForSearch") ?? "{}") as Record<
-				string,
-				string
-			>;
-
-			currentImageIdForSearch[imageListState.currentSearch] = image_id.toString();
-			localStorage.setItem("currentImageIdForSearch", JSON.stringify(currentImageIdForSearch));
-		}
+		const changed = this._imageId != image_id;
 		this._imageId = image_id;
 
-		if (imageChanged) {
-			console.log(`Current image changed, clearing suggested tags`);
+		if (changed) {
 			this.suggestedTags = null;
 			this.suggestedTagsInFlight = false;
 
@@ -54,6 +67,12 @@ export class CurrentImageState {
 				// Make sure we have the image in our cache and update it
 				void imageListState.fetchImage(image_id);
 			}
+		}
+	}
+
+	dispose() {
+		if (this.persistDisposer) {
+			this.persistDisposer();
 		}
 	}
 
@@ -66,9 +85,7 @@ export class CurrentImageState {
 		}
 
 		// Send off a request for tag suggestions
-		runInAction(() => {
-			this.setSuggestedTagsInFlight(currentImage);
-		});
+		this.setSuggestedTagsInFlight(currentImage);
 
 		try {
 			result = await fetchTagSuggestions(currentImage);

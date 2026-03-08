@@ -101,6 +101,16 @@ export class ImageObject {
 
 		return value;
 	}
+
+	nonSingularAttribute(key: string): string[] | null {
+		const values = this.attributes.get(key);
+
+		if (values === undefined || values.size < 1) {
+			return null;
+		}
+
+		return Array.from(values.keys());
+	}
 }
 
 export class Tag {
@@ -317,6 +327,47 @@ export async function addImageAttribute(imageId: number, key: string, value: str
 	});
 }
 
+export async function removeImageAttribute(imageId: number, key: string, value: string) {
+	const image = imageListState.getImageById(imageId);
+	const userId = authState.userInfo?.id;
+
+	if (image === null) {
+		console.warn(`Image ${imageId} not found in image list`);
+		return;
+	}
+
+	if (userId === null || userId === undefined) {
+		console.warn(`Not logged in, can't remove attribute from image ${imageId}`);
+		return;
+	}
+
+	// Make the API call
+	try {
+		await api.removeImageAttribute(imageId, key, value);
+	} catch (error) {
+		errorMessageState.setErrorMessage(`${error as string}`);
+		return;
+	}
+
+	// Update the image in our state
+	runInAction(() => {
+		const old = image.attributes.get(key);
+
+		if (old === undefined) {
+			return;
+		}
+
+		old.delete(value);
+
+		if (old.size === 0) {
+			image.attributes.delete(key);
+			return;
+		}
+
+		image.attributes.set(key, old);
+	});
+}
+
 export async function suggestCaption(image: ImageObject, prompt: string): Promise<string | null> {
 	try {
 		return await api.getImageCaptionSuggestion(image.hash, prompt);
@@ -495,6 +546,9 @@ export async function initState() {
 
 	// Check if we're logged in
 	await checkIfLoggedIn();
+
+	// Initialize reactions after all modules are loaded
+	currentImageState.initializeReactions();
 }
 
 export async function login_key_from_password(username: string, password: string): Promise<string> {

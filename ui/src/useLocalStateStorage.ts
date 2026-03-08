@@ -47,28 +47,42 @@ function useLocalStorageState<T>(
 		}
 	});
 
+	// Re-hydrate when the key prop changes
+	useEffect(() => {
+		if (prevKeyRef.current === key) return;
+		prevKeyRef.current = key;
+
+		try {
+			const stored = window.localStorage.getItem(key);
+			setState(
+				stored !== null
+					? deserialize(stored)
+					: typeof initialValue === "function"
+						? (initialValue as () => T)()
+						: initialValue,
+			);
+		} catch (err) {
+			console.error(`Error reading localStorage key "${key}":`, err);
+			setState(actualInitialValue);
+		}
+	}, [actualInitialValue, deserialize, initialValue, key]);
+
 	// Effect to update localStorage when state or key changes
 	useEffect(() => {
-		if (prevKeyRef.current !== key) {
-			prevKeyRef.current = key;
-		}
-
-		const saveToLocalStorage = () => {
+		const write = () => {
 			try {
 				window.localStorage.setItem(key, serialize(state));
-			} catch (error) {
-				console.error(`Error setting localStorage key "${key}":`, error);
+			} catch (err) {
+				console.error(`Error setting localStorage key "${key}":`, err);
 			}
 		};
 
 		if (debounce > 0) {
-			const timeoutId = setTimeout(saveToLocalStorage, debounce);
-			return () => {
-				clearTimeout(timeoutId);
-			};
-		} else {
-			saveToLocalStorage();
+			const t = setTimeout(write, debounce);
+			return () => clearTimeout(t);
 		}
+
+		write();
 	}, [key, state, debounce, serialize]);
 
 	// Effect to handle storage events and sync state across tabs

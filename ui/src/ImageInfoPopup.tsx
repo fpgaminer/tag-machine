@@ -3,9 +3,24 @@ import { observer } from "mobx-react";
 import exifr from "exifr";
 import React from "react";
 import { authState } from "./state/Auth";
-import { authenticatedFetch } from "./api";
+import { authenticatedFetch, removeImage } from "./api";
 import Popup from "./Popup";
 import { makeAutoObservable } from "mobx";
+
+async function deleteImage(imageHash: string) {
+	// Confirm deletion
+	if (!confirm("Are you sure you want to delete this image from TagMachine?")) {
+		return;
+	}
+
+	try {
+		await removeImage(imageHash);
+	} catch (error) {
+		alert(`Failed to delete image: ${String(error)}`);
+		return;
+	}
+	alert("Image deleted from TagMachine");
+}
 
 async function uploadToImgOps(imageHash: string, token: string | null) {
 	if (token === null) {
@@ -131,6 +146,12 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 						<div className="image-info-attribute-name">ImgOps</div>
 						<div className="image-info-attribute-value">
 							<button onClick={() => uploadToImgOps(image.hash, userToken)}>Upload to ImgOps</button>
+						</div>
+					</div>
+					<div className="image-info-attribute">
+						<div className="image-info-attribute-name">Delete</div>
+						<div className="image-info-attribute-value">
+							<button onClick={() => deleteImage(image.hash)}>Delete from TagMachine</button>
 						</div>
 					</div>
 				</div>

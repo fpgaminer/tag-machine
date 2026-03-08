@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates } from "./state";
+import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates, removeImageAttribute } from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
 import { authenticatedFetch } from "./api";
@@ -9,51 +9,146 @@ import magicwand24Filled from "@iconify/icons-fluent/magic-wand-24-filled";
 import { Icon } from "@iconify/react";
 import { observer } from "mobx-react";
 import OpenAI from "openai";
+import useLocalStorageState from "./useLocalStateStorage";
 
 interface QuestionAnswer {
 	question: string;
 	answer: string;
 }
 
+interface LocalDraft {
+	question: string;
+	answer: string;
+	categories: string[];
+	categoriesInput: string;
+}
+
+function buildDraft(
+	source: Partial<LocalDraft> | null | undefined,
+	fallbacks: { question: string; answer: string; categories: string[] },
+): LocalDraft {
+	const categories = Array.isArray(source?.categories)
+		? normalizeCategories(source.categories)
+		: typeof source?.categoriesInput === "string"
+			? parseCategoriesInput(source.categoriesInput)
+			: fallbacks.categories;
+
+	return {
+		question: typeof source?.question === "string" ? source.question : fallbacks.question,
+		answer: typeof source?.answer === "string" ? source.answer : fallbacks.answer,
+		categories,
+		categoriesInput:
+			typeof source?.categoriesInput === "string" ? source.categoriesInput : categories.join(","),
+	};
+}
+
+function normalizeCategories(categories: string[] | null | undefined): string[] {
+	if (!Array.isArray(categories)) {
+		return [];
+	}
+
+	return Array.from(new Set(categories.map((category) => category.trim()).filter(Boolean)));
+}
+
+function parseCategoriesInput(value: string): string[] {
+	return normalizeCategories(value.split(","));
+}
+
+function areCategoriesEqual(left: string[], right: string[]): boolean {
+	if (left.length !== right.length) {
+		return false;
+	}
+
+	const leftSorted = [...left].sort();
+	const rightSorted = [...right].sort();
+
+	return leftSorted.every((category, index) => category === rightSorted[index]);
+}
+
 function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const imageId = currentImage.id;
+
+	/** ───────────────────────────── Server-authoritative data ───────────────────────────── */
 	const imageQA = currentImage.singularAttribute("questionAnswer");
-	const imageCategory = currentImage.singularAttribute("vqa_category") ?? "";
-	const parsedQA = useMemo(() => (imageQA === null ? null : (JSON.parse(imageQA) as QuestionAnswer)), [imageQA]);
-	const [localQA, setLocalQA] = useState<QuestionAnswer>(parsedQA ?? { question: "", answer: "" });
-	const localStorageCaption = useMemo(() => getLocalStorageVQA(imageId), [imageId]);
-	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
+	const imageCategories = normalizeCategories(currentImage.nonSingularAttribute("vqa_category") ?? []);
+
+	const parsedQA = useMemo(
+		() => (imageQA === null ? { question: "", answer: "" } : (JSON.parse(imageQA) as QuestionAnswer)),
+		[imageQA],
+	);
+	const serverDraft = useMemo(
+		() => ({
+			question: parsedQA.question,
+			answer: parsedQA.answer,
+			categories: imageCategories,
+		}),
+		[parsedQA, imageCategories],
+	);
+
+	/** ───────────────────────────── Draft state persisted per image ─────────────────────── */
+	const [draft, setDraft] = useLocalStorageState<LocalDraft>(
+		`vqa-drafts-${imageId}`,
+		() => ({ ...serverDraft, categoriesInput: serverDraft.categories.join(",") }),
+		{
+			sync: true,
+			debounce: 300,
+			deserialize: (value) => buildDraft(JSON.parse(value) as Partial<LocalDraft>, serverDraft),
+		},
+	);
+	const normalizedDraftCategories = useMemo(() => normalizeCategories(draft.categories), [draft.categories]);
+
+	const wordCount = useMemo(() => draft.answer.trim().split(/\s+/).filter(Boolean).length, [draft.answer]);
+
+	const isUnsaved =
+		draft.question !== parsedQA?.question ||
+		draft.answer !== parsedQA?.answer ||
+		!areCategoriesEqual(normalizedDraftCategories, imageCategories);
+
+	// ─────────────────── UI state / refs ───────────────────
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
 	const [isSuggestAnswersLoading, setIsSuggestAnswersLoading] = useState(false);
-	const [qaCategory, setQACategory] = useState<string>("");
-	const wordCount = useMemo(() => localQA.answer.trim().split(/\s+/).filter(Boolean).length, [localQA.answer]);
 
-	// Update the question and answer when the image changes
-	useEffect(() => {
-		setLocalQA(localStorageCaption ?? parsedQA ?? { question: "", answer: "" });
-		setQACategory(imageCategory);
-	}, [parsedQA, localStorageCaption, imageCategory]);
-
-	const isUnsaved =
-		localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer || qaCategory !== imageCategory;
-
+	// ─────────────────── Save to server ───────────────────
 	const handleSave = useCallback(async () => {
-		if (localQA.question !== parsedQA?.question || localQA.answer !== parsedQA?.answer) {
-			await addImageAttribute(imageId, "questionAnswer", JSON.stringify(localQA), true);
+		try {
+			const ops: Promise<unknown>[] = [];
+			if (draft.question !== parsedQA?.question || draft.answer !== parsedQA?.answer) {
+				ops.push(
+					addImageAttribute(
+						imageId,
+						"questionAnswer",
+						JSON.stringify({ question: draft.question, answer: draft.answer }),
+						true,
+					),
+				);
+			}
+			if (!areCategoriesEqual(normalizedDraftCategories, imageCategories)) {
+				// Categories to remove
+				for (const category of imageCategories) {
+					if (!normalizedDraftCategories.includes(category)) {
+						ops.push(removeImageAttribute(imageId, "vqa_category", category));
+					}
+				}
+
+				// Categories to add
+				for (const category of normalizedDraftCategories) {
+					if (!imageCategories.includes(category)) {
+						ops.push(addImageAttribute(imageId, "vqa_category", category, false));
+					}
+				}
+			}
+			await Promise.all(ops);
+			clearDraft(imageId);
+		} catch (err) {
+			errorMessageState.setErrorMessage(`Failed to save VQA data: ${String(err)}`);
 		}
+	}, [imageId, draft, parsedQA, imageCategories, normalizedDraftCategories]);
 
-		if (qaCategory !== imageCategory) {
-			await addImageAttribute(imageId, "vqa_category", qaCategory, true);
-		}
-
-		// Clear the local storage
-		clearLocalStorageVQA(imageId);
-	}, [localQA, parsedQA, qaCategory, imageCategory, imageId]);
-
-	// Listen for save shortcut
+	// ─────────────────── Hot‑key (Ctrl/Cmd+S) ───────────────────
 	useEffect(() => {
 		const handleKeyDown = (e: KeyboardEvent) => {
 			if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "s") {
@@ -67,28 +162,36 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		};
 	}, [handleSave]);
 
-	function onRevertClicked() {
-		// Revert to the server's version of the question and answer
-		setLocalQA(parsedQA ?? { question: "", answer: "" });
-		setQACategory(imageCategory);
-		clearLocalStorageVQA(imageId);
-	}
+	const onRevert = () => {
+		clearDraft(imageId);
+		setDraft({
+			question: parsedQA?.question ?? "",
+			answer: parsedQA?.answer ?? "",
+			categories: imageCategories,
+			categoriesInput: imageCategories.join(","),
+		});
+	};
 
-	function onQuestionChanged(e: React.ChangeEvent<HTMLTextAreaElement>) {
-		setLocalQA((prevQA) => ({ ...prevQA, question: e.target.value }));
-		saveLocalStorageVQA(imageId, { ...localQA, question: e.target.value });
-	}
-
-	function onAnswerChanged(e: React.ChangeEvent<HTMLTextAreaElement>) {
-		setLocalQA((prevQA) => ({ ...prevQA, answer: e.target.value }));
-		saveLocalStorageVQA(imageId, { ...localQA, answer: e.target.value });
-	}
+	// ─────────────────── Text change handlers ───────────────────
+	const onQuestionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setDraft((prev) => ({ ...prev, question: e.target.value }));
+	};
+	const onAnswerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
+		setDraft((prev) => ({ ...prev, answer: e.target.value }));
+	};
+	const onCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+		const categoriesInput = e.target.value;
+		setDraft((prev) => ({
+			...prev,
+			categories: parseCategoriesInput(categoriesInput),
+			categoriesInput,
+		}));
+	};
 
 	async function onSuggestAnswersClicked() {
 		setIsSuggestAnswersLoading(true);
 		const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
-
-		const suggestions = await multiModelSuggestions(localQA.question, imageId, models);
+		const suggestions = await multiModelSuggestions(draft.question, imageId, models);
 		setSuggestedAnswers(suggestions);
 		setIsSuggestAnswersLoading(false);
 	}
@@ -140,8 +243,8 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		let prompt =
 			"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
 
-		if (qaCategory !== "") {
-			prompt = `${prompt} The prompt/question must be in the category: ${qaCategory}`;
+		if (normalizedDraftCategories.length > 0) {
+			prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories}`;
 		}
 
 		for await (const response of doCustom(imageId, "questions", prompt)) {
@@ -149,15 +252,10 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				return;
 			}
 
-			setLocalQA({ ...localQA, question: response });
+			setDraft((prev) => ({ ...prev, question: response }));
 		}
 
 		setIsCustomLoading(false);
-		//if (response === null) {
-		//	return;
-		//}
-
-		//setLocalQA({ ...localQA, question: response });
 	}
 
 	async function onCustom2Clicked() {
@@ -166,8 +264,9 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		for await (const response of doCustom(
 			imageId,
 			//"answers",
-			"kiqxrbng",
-			localQA.question,
+			//"mb3500zp",
+			"fancyfeast/llama-joycaption-beta-one-hf-llava",
+			draft.question,
 			5053, //5052,
 			//"You are a helpful image assistant.",
 			//"You are JoyCaption, a helpful AI assistant with vision capabilities.",
@@ -178,26 +277,19 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				return;
 			}
 
-			setLocalQA({ ...localQA, answer: response });
+			setDraft((prev) => ({ ...prev, answer: response }));
 		}
-		//const response = await doCustom(imageId, localQA.question, 5031);
-		//const response = "";
 		setIsCustom2Loading(false);
-		//if (response === null) {
-		//	return;
-		//}
-
-		//setLocalQA({ ...localQA, answer: response });
 	}
 
 	function onPromptSelected(prompt: string) {
-		setLocalQA({ ...localQA, question: prompt });
+		setDraft((prev) => ({ ...prev, question: prompt }));
 		setSuggestedPrompts(null);
 		answerTextareaRef.current?.focus();
 	}
 
 	function onAnswerSelected(answer: string) {
-		setLocalQA({ ...localQA, answer });
+		setDraft((prev) => ({ ...prev, answer: answer }));
 		setSuggestedAnswers(null);
 	}
 
@@ -216,7 +308,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 					content: [
 						{
 							type: "text",
-							text: localQA.question,
+							text: draft.question,
 						},
 					],
 				},
@@ -226,7 +318,11 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			0.9,
 		);
 
-		setQACategory(response.trim());
+			setDraft((prev) => ({
+				...prev,
+				categories: parseCategoriesInput(response),
+				categoriesInput: response,
+			}));
 	}
 
 	function handleEscape(e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -256,7 +352,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						Suggest As {isSuggestAnswersLoading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
 					</button>
 					<button
-						onClick={onRevertClicked}
+						onClick={onRevert}
 						disabled={!isUnsaved}
 						title="Revert to the server's version of the question and answer"
 					>
@@ -291,12 +387,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			)}
 			<div className="remainingSpace vqaEditor">
 				<div className="category-input-container">
-					<input
-						placeholder="Enter the category"
-						value={qaCategory}
-						onChange={(e) => setQACategory(e.target.value)}
-						type="text"
-						onKeyDown={handleEscape}
+						<input
+							placeholder="Enter the categories"
+							value={draft.categoriesInput}
+							onChange={onCategoryChange}
+							type="text"
+							onKeyDown={handleEscape}
 						tabIndex={1}
 					/>
 					<button
@@ -309,16 +405,16 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				</div>
 				<textarea
 					placeholder="Enter your question"
-					value={localQA.question}
-					onChange={onQuestionChanged}
+					value={draft.question}
+					onChange={onQuestionChange}
 					onKeyDown={handleEscape}
 					tabIndex={2}
 				/>
 				<textarea
 					ref={answerTextareaRef}
 					placeholder="Enter the answer"
-					value={localQA.answer}
-					onChange={onAnswerChanged}
+					value={draft.answer}
+					onChange={onAnswerChange}
 					onKeyDown={handleEscape}
 					tabIndex={3}
 				/>
@@ -328,23 +424,8 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	);
 }
 
-function saveLocalStorageVQA(imageId: number, qa: QuestionAnswer) {
-	const k = `useVQAEdits-${imageId}`;
-	localStorage.setItem(k, JSON.stringify(qa));
-}
-
-function clearLocalStorageVQA(imageId: number) {
-	const k = `useVQAEdits-${imageId}`;
-	localStorage.removeItem(k);
-}
-
-function getLocalStorageVQA(imageId: number): QuestionAnswer | null {
-	const k = `useVQAEdits-${imageId}`;
-	const v = localStorage.getItem(k);
-	if (v === null) {
-		return null;
-	}
-	return JSON.parse(v) as QuestionAnswer;
+function clearDraft(imageId: number) {
+	localStorage.removeItem(`vqa-drafts-${imageId}`);
 }
 
 export default observer(VQAEditor);
