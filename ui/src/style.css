@@ -398,6 +398,7 @@ li p {
 	flex-direction: column;
 	gap: 10px;
 	padding: 10px 10px;
+	box-sizing: border-box;
 }
 
 .upload-popup-body-content a {
@@ -406,80 +407,170 @@ li p {
 
 /* Drop Zone Styling */
 .upload-popup-body-content-dropzone {
-    border: 3px dashed #f0f0f0;
-    border-radius: 5px;
-    padding: 20px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    position: relative;
-    transition: background-color 0.3s ease;
-    cursor: pointer;
-	width: 200px;
+	border: 3px dashed #f0f0f0;
+	border-radius: 5px;
+	padding: 20px;
+	display: flex;
+	justify-content: center;
+	align-items: center;
+	position: relative;
+	transition: background-color 0.3s ease;
+	cursor: pointer;
+	width: 100%;
 	height: 150px;
 	margin-left: auto;
 	margin-right: auto;
+	flex: 1 1 auto;
+	min-height: 150px;
+	max-height: 220px;
+	overflow: hidden;
+	box-sizing: border-box;
 }
 
 .upload-popup-body-content-dropzone:hover {
-    background-color: #3a3a3a;
+	background-color: #3a3a3a;
 }
 
 .dropzone-close {
-    position: absolute;
-    top: 5px;
-    right: 5px;
-    background-color: #ff4b4b;
-    color: white;
-    border-radius: 50%;
-    width: 20px;
-    height: 20px;
-    text-align: center;
-    line-height: 18px;
-    cursor: pointer;
+	position: absolute;
+	top: 5px;
+	right: 5px;
+	background-color: #ff4b4b;
+	color: white;
+	border-radius: 50%;
+	width: 24px;
+	height: 24px;
+	text-align: center;
+	line-height: 20px;
+	cursor: pointer;
+	border: none;
+	padding: 0;
+	margin: 0;
+	font-size: 18px;
+	z-index: 1;
 }
 
 .upload-popup-body-content-dropzone p {
-    margin: 0;
-    color: #f0f0f0;
-    font-weight: 500;
-    font-size: 1.1em;
-    transition: color 0.3s ease;
+	margin: 0;
+	color: #f0f0f0;
+	font-weight: 500;
+	font-size: 1.1em;
+	transition: color 0.3s ease;
+	text-align: center;
 }
 
 .upload-popup-body-content-dropzone:hover p {
-    color: #ffffff;
+	color: #ffffff;
 }
 
 /* Image Preview Style */
 .upload-popup-body-content-dropzone img {
-    max-width: 100%;
-    max-height: 100%;
-    border-radius: 5px;
+	max-width: 100%;
+	max-height: 100%;
+	border-radius: 5px;
+}
+
+.upload-popup-selection {
+	width: 100%;
+	height: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
+}
+
+.upload-popup-selection-single img {
+	flex: 1 1 auto;
+	object-fit: contain;
+	min-height: 0;
+}
+
+.upload-popup-selection-summary {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+	align-items: center;
+	text-align: center;
+	max-width: 100%;
+}
+
+.upload-popup-selection-summary strong,
+.upload-popup-selection-summary span,
+.upload-popup-selection-item {
+	overflow-wrap: anywhere;
+}
+
+.upload-popup-selection-list {
+	width: 100%;
+	max-height: 120px;
+	overflow-y: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
+}
+
+.upload-popup-selection-item {
+	background-color: rgba(255, 255, 255, 0.08);
+	border-radius: 4px;
+	padding: 6px 8px;
+	font-size: 0.95em;
+}
+
+.upload-popup-source {
+	display: flex;
+	flex-direction: column;
+	gap: 6px;
 }
 
 /* Input and Button Styles */
 .upload-popup input[type="text"] {
-    width: 400px;
-    padding: 10px;
-    margin-top: 10px;
-    border-radius: 5px;
-    border: none;
-    color: #2b2b2b;
-    background-color: #f0f0f0;
+	width: 100%;
+	padding: 10px;
+	border-radius: 5px;
+	border: none;
+	color: #2b2b2b;
+	background-color: #f0f0f0;
+	box-sizing: border-box;
 }
 
 .upload-popup button {
-	width: 100px;
+	width: 140px;
 	padding: 10px;
-	margin-top: 10px;
 	border-radius: 5px;
 	border: none;
 	cursor: pointer;
 }
 
+.upload-popup button:disabled {
+	opacity: 0.6;
+	cursor: not-allowed;
+}
+
 .upload-popup input[type="file"] {
 	display: none;
+}
+
+.upload-popup-progress,
+.upload-popup-status {
+	border-radius: 5px;
+	padding: 10px;
+}
+
+.upload-popup-progress {
+	background-color: rgba(255, 255, 255, 0.08);
+}
+
+.upload-popup-status-success {
+	background-color: rgba(48, 162, 76, 0.28);
+}
+
+.upload-popup-status-warning {
+	background-color: rgba(210, 159, 54, 0.28);
+}
+
+.upload-popup-status-error {
+	background-color: rgba(189, 64, 64, 0.32);
 }
 
 
