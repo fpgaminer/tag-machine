@@ -1,10 +1,9 @@
 import { popupsState, PopupStates, Tag } from "./state";
-import wikiPages from "./parsed_tag_pages.json";
 import DTextDisplay, { DTextTag } from "./DTextDisplay";
 import { observer } from "mobx-react";
 import { useEffect, useState } from "react";
-import { makeAutoObservable } from "mobx";
 import Popup from "./Popup";
+import { makeAutoObservable } from "mobx";
 
 const DANBOORU_API = "https://danbooru.donmai.us";
 
@@ -15,9 +14,22 @@ interface PostData {
 	preview_file_url: string;
 }
 
+type WikiPages = Record<string, DTextTag[]>;
+
+let wikiPagesPromise: Promise<WikiPages> | null = null;
+
+async function loadWikiPages(): Promise<WikiPages> {
+	if (wikiPagesPromise === null) {
+		wikiPagesPromise = import("./parsed_tag_pages.json").then((module) => module.default as WikiPages);
+	}
+
+	return wikiPagesPromise;
+}
+
 export const WikiPopup = observer(function WikiPopupComponent() {
 	const tag = wikiPopupState.tag;
 	const [previewData, setPreviewData] = useState<PostData[] | null>(null);
+	const [wikiPages, setWikiPages] = useState<WikiPages | null>(null);
 
 	// Fetch preview posts for this tag
 	useEffect(() => {
@@ -39,17 +51,32 @@ export const WikiPopup = observer(function WikiPopupComponent() {
 		}
 	}, [tag]);
 
-	if (tag === null || !(tag.name in wikiPages)) {
+	useEffect(() => {
+		if (tag === null || wikiPages !== null) {
+			return;
+		}
+
+		void loadWikiPages()
+			.then(setWikiPages)
+			.catch((error: unknown) => {
+				console.error("Failed to load wiki pages", error);
+			});
+	}, [tag, wikiPages]);
+
+	if (tag === null) {
 		return null;
 	}
 
-	const wikiPagesTyped = wikiPages as Record<string, DTextTag[]>;
-	const tagDText = wikiPagesTyped[tag.name];
+	const tagDText = wikiPages?.[tag.name];
+
+	if (wikiPages !== null && tagDText === undefined) {
+		return null;
+	}
 
 	return (
 		<Popup onClose={() => popupsState.removePopup(PopupStates.Wiki)} title={tag.name} className="wiki-popup">
 			<div className="wiki-popup-body-content">
-				<DTextDisplay dtext={tagDText} />
+				{tagDText !== undefined ? <DTextDisplay dtext={tagDText} /> : <p>Loading wiki...</p>}
 				<PostPreviews posts={previewData ?? []} />
 			</div>
 		</Popup>

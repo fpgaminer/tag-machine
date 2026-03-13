@@ -7,12 +7,20 @@ import { tokenizeString } from "./Llama3TokenizerProxy";
 import { Tokenizer } from "@huggingface/tokenizers";
 
 const modelId = "openai/clip-vit-large-patch14";
-const [tokenizerJson, tokenizerConfig] = await Promise.all([
-	fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`).then((r) => r.json()),
-	fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`).then((r) => r.json()),
-]);
+let clipTokenizerPromise: Promise<Tokenizer> | null = null;
 
-const tokenizer = new Tokenizer(tokenizerJson, tokenizerConfig);
+async function getClipTokenizer(): Promise<Tokenizer> {
+	if (clipTokenizerPromise === null) {
+		clipTokenizerPromise = Promise.all([
+			fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`).then((response) => response.json()),
+			fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`).then((response) =>
+				response.json(),
+			),
+		]).then(([tokenizerJson, tokenizerConfig]) => new Tokenizer(tokenizerJson, tokenizerConfig));
+	}
+
+	return clipTokenizerPromise;
+}
 
 enum CaptionMode {
 	StandardCaption = "StandardCaption",
@@ -60,6 +68,7 @@ function CaptionEditor() {
 	const [captionTone, setCaptionTone] = useState<CaptionTone>("formal");
 	const [captionLength, setCaptionLength] = useState<CaptionLength>(null);
 	const [tokens, setTokens] = useState<string[]>([]);
+	const [clipTokenCount, setClipTokenCount] = useState<number | null>(null);
 
 	// Save button state
 	const [saving, setSaving] = useState(SaveButtonState.Idle);
@@ -82,9 +91,6 @@ function CaptionEditor() {
 	// Check if the local caption is different from the current caption (and thus unsaved)
 	const isUnsaved = localCaption != (currentText ?? "");
 
-	// Count tokens
-	const clip_tokens = tokenizer.tokenize(localCaption, { add_special_tokens: false });
-
 	useEffect(() => {
 		const text = localCaption;
 		const fetchTokens = async () => {
@@ -100,6 +106,30 @@ function CaptionEditor() {
 		};
 
 		void fetchTokens();
+	}, [localCaption]);
+
+	useEffect(() => {
+		let active = true;
+
+		void getClipTokenizer()
+			.then((tokenizer) => {
+				if (!active) {
+					return;
+				}
+
+				setClipTokenCount(tokenizer.tokenize(localCaption, { add_special_tokens: false }).length);
+			})
+			.catch((error: unknown) => {
+				console.error("Failed to load CLIP tokenizer", error);
+
+				if (active) {
+					setClipTokenCount(null);
+				}
+			});
+
+		return () => {
+			active = false;
+		};
 	}, [localCaption]);
 
 	// Update the caption when the current image changes
@@ -264,7 +294,7 @@ function CaptionEditor() {
 			<div className="remainingSpace captionEditor">
 				<textarea value={localCaption} onChange={onCaptionChange} />
 				<div className="tokenCount">
-					{tokens.length} tokens, {clip_tokens.length} clip tokens
+					{tokens.length} tokens, {clipTokenCount ?? "..."} clip tokens
 				</div>
 			</div>
 		</div>
