@@ -214,7 +214,7 @@ export class CurrentImageState {
 				break;
 			}
 
-			if (imageListState.getSearchIndexById(image_id) == inx) {
+			if (imageListState.getSearchIndexById(image_id) != inx) {
 				// We've reached the end of the list
 				break;
 			}
