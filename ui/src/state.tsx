@@ -3,8 +3,9 @@ import * as api from "./api";
 import { imageListState } from "./state/ImageList";
 import { tagListState } from "./state/TagList";
 import { currentImageState } from "./state/CurrentImage";
-import { scryptAsync } from "@noble/hashes/scrypt";
+import { scryptAsync } from "@noble/hashes/scrypt.js";
 import { authState, checkIfLoggedIn } from "./state/Auth";
+import { bytesToHex } from "@noble/hashes/utils.js";
 
 export const IMAGE_LIST_FETCH_SIZE = 256;
 
@@ -556,9 +557,7 @@ export async function login_key_from_password(username: string, password: string
 	const login_key = await scryptAsync(password, username, { N: 2 ** 16, r: 8, p: 1, dkLen: 32 });
 
 	// Hex encode the login key
-	const login_key_hex = Array.from(login_key)
-		.map((byte) => byte.toString(16).padStart(2, "0"))
-		.join("");
+	const login_key_hex = bytesToHex(login_key);
 
 	return login_key_hex;
 }
