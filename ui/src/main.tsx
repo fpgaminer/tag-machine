@@ -5,4 +5,4 @@ import { initState } from "./state";
 
 void initState();
 
-ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(<App />);
+ReactDOM.createRoot(document.getElementById("root")!).render(<App />);

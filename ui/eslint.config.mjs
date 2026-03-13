@@ -3,7 +3,7 @@ import tseslint from "typescript-eslint";
 import reactPlugin from "eslint-plugin-react";
 import reactHooks from "eslint-plugin-react-hooks";
 import reactCompiler from "eslint-plugin-react-compiler";
-import eslintConfigPrettier from "eslint-config-prettier";
+import eslintPluginPrettierRecommended from "eslint-plugin-prettier/recommended";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -12,7 +12,7 @@ const __dirname = path.dirname(__filename);
 
 export default tseslint.config(
 	{
-		ignores: ["dist/**", "node_modules/**"],
+		ignores: ["dist/**", "node_modules/**", "src/llama3Tokenizer.js", "src/llama3Tokenizer.d.ts"],
 	},
 
 	js.configs.recommended,
@@ -74,5 +74,10 @@ export default tseslint.config(
 		},
 	},
 
-	eslintConfigPrettier,
+	eslintPluginPrettierRecommended,
+	{
+		rules: {
+			"prettier/prettier": "warn",
+		},
+	},
 );

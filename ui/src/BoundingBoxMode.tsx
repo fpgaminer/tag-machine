@@ -161,11 +161,7 @@ function BoundingBoxMode() {
 
 export default observer(BoundingBoxMode);
 
-async function suggestBoxes(
-	image_id: number,
-	prompt: string = "a watermark",
-	port: number = 5049,
-): Promise<BoundingBox[]> {
+async function suggestBoxes(image_id: number, prompt = "a watermark", port = 5049): Promise<BoundingBox[]> {
 	try {
 		const response = await fetch(`http://localhost:${port}/yolo`, {
 			method: "POST",
@@ -197,7 +193,7 @@ async function suggestBoxes(
 	}
 }
 
-async function tightenBoxes(image_id: number, boxes: BoundingBox[], port: number = 5049): Promise<BoundingBox[]> {
+async function tightenBoxes(image_id: number, boxes: BoundingBox[], port = 5049): Promise<BoundingBox[]> {
 	try {
 		const boxesArray = boxes.map((box) => [box.left, box.top, box.right, box.bottom]);
 		const response = await fetch(`http://localhost:${port}/sam2`, {

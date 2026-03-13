@@ -146,7 +146,11 @@ function UserPopup() {
 	});
 
 	return (
-		<Popup onClose={() => popupsState.removePopup(PopupStates.UserSettings)} title="User Settings" className="user-popup">
+		<Popup
+			onClose={() => popupsState.removePopup(PopupStates.UserSettings)}
+			title="User Settings"
+			className="user-popup"
+		>
 			<div className="popup-window-body-content">
 				<div className="user-settings-section">
 					<h2>Account Information</h2>

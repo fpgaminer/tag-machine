@@ -17,7 +17,6 @@ declare global {
 
 const TURNSTILE_SRC = "https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit";
 
-
 function ensureTurnstileScript(): Promise<void> {
 	return new Promise((resolve, reject) => {
 		// Already available
@@ -27,17 +26,11 @@ function ensureTurnstileScript(): Promise<void> {
 		}
 
 		// Reuse an existing script if one is already being loaded
-		const existing = document.querySelector<HTMLScriptElement>(
-			`script[src="${TURNSTILE_SRC}"]`,
-		);
+		const existing = document.querySelector<HTMLScriptElement>(`script[src="${TURNSTILE_SRC}"]`);
 
 		if (existing) {
 			existing.addEventListener("load", () => resolve(), { once: true });
-			existing.addEventListener(
-				"error",
-				() => reject(new Error("Failed to load Turnstile script")),
-				{ once: true },
-			);
+			existing.addEventListener("error", () => reject(new Error("Failed to load Turnstile script")), { once: true });
 			return;
 		}
 
@@ -46,16 +39,11 @@ function ensureTurnstileScript(): Promise<void> {
 		script.defer = true;
 
 		script.addEventListener("load", () => resolve(), { once: true });
-		script.addEventListener(
-			"error",
-			() => reject(new Error("Failed to load Turnstile script")),
-			{ once: true },
-		);
+		script.addEventListener("error", () => reject(new Error("Failed to load Turnstile script")), { once: true });
 
 		document.head.appendChild(script);
 	});
 }
-
 
 const Turnstile: React.FC<TurnstileProps> = ({ siteKey, onSuccess, onError, action, cData }) => {
 	const ref = useRef<HTMLDivElement>(null);
@@ -83,7 +71,7 @@ const Turnstile: React.FC<TurnstileProps> = ({ siteKey, onSuccess, onError, acti
 		return () => {
 			cancelled = true;
 		};
-	}, []);
+	}, [onError]);
 
 	useEffect(() => {
 		if (scriptError) {
@@ -107,7 +95,7 @@ const Turnstile: React.FC<TurnstileProps> = ({ siteKey, onSuccess, onError, acti
 			"error-callback": onError,
 			action,
 			cData,
-		}) as string;
+		})!;
 
 		return () => {
 			if (widgetIdRef.current !== null && window.turnstile) {

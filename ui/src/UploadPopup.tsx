@@ -6,12 +6,10 @@ import useLocalStorageState from "./useLocalStateStorage";
 import Popup from "./Popup";
 import { imageListState } from "./state/ImageList";
 
-type UploadStatus =
-	| {
-			type: "success" | "warning" | "error";
-			message: string;
-	  }
-	| null;
+type UploadStatus = {
+	type: "success" | "warning" | "error";
+	message: string;
+} | null;
 
 function UploadPopup() {
 	const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
@@ -61,8 +59,7 @@ function UploadPopup() {
 		if (validFiles.length === 0) {
 			setUploadStatus({
 				type: "error",
-				message:
-					skippedFileCount > 0 ? "Only image files can be uploaded." : "No files were selected.",
+				message: skippedFileCount > 0 ? "Only image files can be uploaded." : "No files were selected.",
 			});
 			return;
 		}

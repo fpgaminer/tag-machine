@@ -1,5 +1,13 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
-import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates, removeImageAttribute } from "./state";
+import {
+	addImageAttribute,
+	errorMessageState,
+	imageIdToUrl,
+	ImageObject,
+	popupsState,
+	PopupStates,
+	removeImageAttribute,
+} from "./state";
 import SaveButton from "./SaveButton";
 import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
@@ -35,8 +43,7 @@ function buildDraft(
 		question: typeof source?.question === "string" ? source.question : fallbacks.question,
 		answer: typeof source?.answer === "string" ? source.answer : fallbacks.answer,
 		categories,
-		categoriesInput:
-			typeof source?.categoriesInput === "string" ? source.categoriesInput : categories.join(","),
+		categoriesInput: typeof source?.categoriesInput === "string" ? source.categoriesInput : categories.join(","),
 	};
 }
 
@@ -370,11 +377,11 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			0.9,
 		);
 
-			setDraft((prev) => ({
-				...prev,
-				categories: parseCategoriesInput(response),
-				categoriesInput: response,
-			}));
+		setDraft((prev) => ({
+			...prev,
+			categories: parseCategoriesInput(response),
+			categoriesInput: response,
+		}));
 	}
 
 	function handleEscape(e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
@@ -428,12 +435,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			)}
 			<div className="remainingSpace vqaEditor">
 				<div className="category-input-container">
-						<input
-							placeholder="Enter the categories"
-							value={draft.categoriesInput}
-							onChange={onCategoryChange}
-							type="text"
-							onKeyDown={handleEscape}
+					<input
+						placeholder="Enter the categories"
+						value={draft.categoriesInput}
+						onChange={onCategoryChange}
+						type="text"
+						onKeyDown={handleEscape}
 						tabIndex={1}
 					/>
 					<button
@@ -639,7 +646,7 @@ async function doGemini(
 			systemInstruction: [
 				{
 					text: systemInstruction,
-				}
+				},
 			],
 			responseMimeType: responseSchema ? "application/json" : "text/plain",
 			safetySettings,

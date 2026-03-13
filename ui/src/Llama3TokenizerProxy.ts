@@ -9,7 +9,7 @@ async function initializeWorker() {
 }
 
 export function useWorker(text: string) {
-	initializeWorker();
+	void initializeWorker();
 	if (worker) {
 		worker.postMessage(text);
 	} else {
@@ -17,11 +17,11 @@ export function useWorker(text: string) {
 	}
 }
 
-export function tokenizeString(text: string): Promise<{ resultText: string; resultTokens: string[]; }> {
+export function tokenizeString(text: string): Promise<{ resultText: string; resultTokens: string[] }> {
 	return new Promise((resolve, reject) => {
-		initializeWorker();
+		void initializeWorker();
 
-		function handleWorkerMessage(event: { data: { resultText: string; resultTokens: string[]; }; }) {
+		function handleWorkerMessage(event: { data: { resultText: string; resultTokens: string[] } }) {
 			const { resultText, resultTokens } = event.data;
 
 			if (resultText === text) {
@@ -39,4 +39,4 @@ export function tokenizeString(text: string): Promise<{ resultText: string; resu
 	});
 }
 
-initializeWorker();
+void initializeWorker();

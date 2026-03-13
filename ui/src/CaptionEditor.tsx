@@ -9,15 +9,27 @@ import { Tokenizer } from "@huggingface/tokenizers";
 const modelId = "openai/clip-vit-large-patch14";
 let clipTokenizerPromise: Promise<Tokenizer> | null = null;
 
-async function getClipTokenizer(): Promise<Tokenizer> {
-	if (clipTokenizerPromise === null) {
-		clipTokenizerPromise = Promise.all([
-			fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`).then((response) => response.json()),
-			fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`).then((response) =>
-				response.json(),
-			),
-		]).then(([tokenizerJson, tokenizerConfig]) => new Tokenizer(tokenizerJson, tokenizerConfig));
+async function fetchJsonObject(url: string): Promise<Record<string, unknown>> {
+	const response = await fetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to fetch ${url}: ${response.status}`);
 	}
+
+	const json: unknown = await response.json();
+
+	if (json === null || typeof json !== "object" || Array.isArray(json)) {
+		throw new Error(`Invalid JSON structure from ${url}`);
+	}
+
+	return json as Record<string, unknown>;
+}
+
+function getClipTokenizer(): Promise<Tokenizer> {
+	clipTokenizerPromise ??= Promise.all([
+		fetchJsonObject(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`),
+		fetchJsonObject(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`),
+	]).then(([tokenizerJson, tokenizerConfig]) => new Tokenizer(tokenizerJson, tokenizerConfig));
 
 	return clipTokenizerPromise;
 }
@@ -27,7 +39,6 @@ enum CaptionMode {
 	TrainingPrompt = "TrainingPrompt",
 }
 
-type CaptionType = "descriptive" | "training_prompt" | "rng-tags";
 type CaptionTone = "formal" | "informal";
 type CaptionLength = "very short" | "short" | "medium-length" | "long" | "very long" | number | null;
 
@@ -37,9 +48,7 @@ enum SaveButtonState {
 	Saved = 2,
 }
 
-const CAPTION_TYPE_MAP: {
-	[key: string]: string[];
-} = {
+const CAPTION_TYPE_MAP = {
 	"descriptive,formal,false,false": ["Write a descriptive caption for this image in a formal tone."],
 	"descriptive,formal,false,true": [
 		"Write a descriptive caption for this image in a formal tone within {word_count} words.",
@@ -58,7 +67,7 @@ const CAPTION_TYPE_MAP: {
 	"rng-tags,formal,false,false": ["Write a list of Booru tags for this image."],
 	"rng-tags,formal,false,true": ["Write a list of Booru tags for this image within {word_count} words."],
 	"rng-tags,formal,true,false": ["Write a {length} list of Booru tags for this image."],
-};
+} satisfies Record<string, readonly string[]>;
 
 function CaptionEditor() {
 	// The current image and its captions (according to the server)
@@ -328,8 +337,8 @@ function getLocalStorageCaption(imageId: number, captionMode: CaptionMode): stri
 	return localStorage.getItem(k);
 }
 
-function formatString(template: string, values: { [key: string]: string }): string {
-	return template.replace(/\{(\w+)\}/g, (match, key) => {
+function formatString(template: string, values: Readonly<Record<string, string>>): string {
+	return template.replace(/\{(\w+)\}/g, (match: string, key: string) => {
 		return key in values ? values[key] : match;
 	});
 }
@@ -337,7 +346,7 @@ function formatString(template: string, values: { [key: string]: string }): stri
 function formatCaptionPrompt(captionType: string, captionTone: string, captionLength: string | number | null): string {
 	const promptKey = `${captionType},${captionTone},${typeof captionLength === "string" ? "true" : "false"},${typeof captionLength === "number" ? "true" : "false"}`;
 
-	if (!(promptKey in CAPTION_TYPE_MAP)) {
+	if (!isCaptionPromptKey(promptKey)) {
 		throw new Error(`Invalid caption prompt key: ${promptKey}`);
 	}
 
@@ -349,6 +358,10 @@ function formatCaptionPrompt(captionType: string, captionTone: string, captionLe
 	const formatted = formatString(template, values);
 
 	return formatted;
+}
+
+function isCaptionPromptKey(key: string): key is keyof typeof CAPTION_TYPE_MAP {
+	return key in CAPTION_TYPE_MAP;
 }
 
 export default observer(CaptionEditor);

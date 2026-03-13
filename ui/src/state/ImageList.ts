@@ -10,7 +10,7 @@ class ImageListState {
 	imagesById: Map<number, ImageObject> = new Map<number, ImageObject>();
 	imagesByHash: Map<string, ImageObject> = new Map<string, ImageObject>();
 	searchList: Uint32Array | null = null;
-	searchHistory: Array<string> = new Array<string>();
+	searchHistory: string[] = [];
 	private version = 0; // Used to keep track of async search results
 	initialSearchPerformed: boolean = false; // During initialization we wait until we're logged in, and then we can perform the initial search
 

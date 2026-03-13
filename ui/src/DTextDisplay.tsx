@@ -44,7 +44,7 @@ export default function DTextDisplay(props: DTextDisplayProps) {
 					);
 				} else {
 					return (
-						<a key={index} onClick={(event) => handleLinkClick(tag.arg as string, event)} href={`#${tag.arg}`}>
+						<a key={index} onClick={(event) => handleLinkClick(tag.arg!, event)} href={`#${tag.arg}`}>
 							{tag.content}
 						</a>
 					);
