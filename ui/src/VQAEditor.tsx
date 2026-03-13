@@ -65,6 +65,8 @@ function areCategoriesEqual(left: string[], right: string[]): boolean {
 	return leftSorted.every((category, index) => category === rightSorted[index]);
 }
 
+type SuggestionMenu = "question" | "answer" | null;
+
 function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const imageId = currentImage.id;
 
@@ -105,12 +107,19 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		!areCategoriesEqual(normalizedDraftCategories, imageCategories);
 
 	// ─────────────────── UI state / refs ───────────────────
+	const questionFieldRef = useRef<HTMLDivElement>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
+	const answerFieldRef = useRef<HTMLDivElement>(null);
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
+	const [activeSuggestionMenu, setActiveSuggestionMenu] = useState<SuggestionMenu>(null);
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
+	const [isSuggestQuestionsLoading, setIsSuggestQuestionsLoading] = useState(false);
 	const [isSuggestAnswersLoading, setIsSuggestAnswersLoading] = useState(false);
+
+	const isQuestionSuggestionLoading = isCustomLoading || isSuggestQuestionsLoading;
+	const isAnswerSuggestionLoading = isCustom2Loading || isSuggestAnswersLoading;
 
 	// ─────────────────── Save to server ───────────────────
 	const handleSave = useCallback(async () => {
@@ -162,6 +171,26 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		};
 	}, [handleSave]);
 
+	useEffect(() => {
+		const handlePointerDown = (event: MouseEvent) => {
+			const target = event.target;
+			if (!(target instanceof Node)) {
+				return;
+			}
+
+			if (questionFieldRef.current?.contains(target) || answerFieldRef.current?.contains(target)) {
+				return;
+			}
+
+			setActiveSuggestionMenu(null);
+		};
+
+		document.addEventListener("mousedown", handlePointerDown);
+		return () => {
+			document.removeEventListener("mousedown", handlePointerDown);
+		};
+	}, []);
+
 	const onRevert = () => {
 		clearDraft(imageId);
 		setDraft({
@@ -190,96 +219,107 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 	async function onSuggestAnswersClicked() {
 		setIsSuggestAnswersLoading(true);
-		const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
-		const suggestions = await multiModelSuggestions(draft.question, imageId, models);
-		setSuggestedAnswers(suggestions);
-		setIsSuggestAnswersLoading(false);
+		try {
+			const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
+			const suggestions = await multiModelSuggestions(draft.question, imageId, models);
+			setSuggestedAnswers(suggestions);
+		} finally {
+			setIsSuggestAnswersLoading(false);
+		}
 	}
 
 	async function onSuggestQuestionsClicked() {
-		const genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
-		if (genPrompt === null) {
-			errorMessageState.setErrorMessage("Please set a prompt for generating VQA questions");
-			return;
-		}
+		setIsSuggestQuestionsLoading(true);
+		try {
+			const genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
+			if (genPrompt === null) {
+				errorMessageState.setErrorMessage("Please set a prompt for generating VQA questions");
+				return;
+			}
 
-		const { systemInstruction, safetySettings } = await getGeminiSettings();
-		if (systemInstruction === null || safetySettings === null) {
-			return;
-		}
+			const { systemInstruction, safetySettings } = await getGeminiSettings();
+			if (systemInstruction === null || safetySettings === null) {
+				return;
+			}
 
-		console.log(
-			"Running Gemini with system instruction:",
-			systemInstruction,
-			"and safety settings:",
-			safetySettings,
-			"and gen prompt:",
-			genPrompt,
-		);
+			console.log(
+				"Running Gemini with system instruction:",
+				systemInstruction,
+				"and safety settings:",
+				safetySettings,
+				"and gen prompt:",
+				genPrompt,
+			);
 
-		const response = await doGemini(systemInstruction, safetySettings, imageId, genPrompt, {
-			type: "object",
-			properties: {
-				prompts: {
-					type: "array",
-					items: {
-						type: "string",
+			const response = await doGemini(systemInstruction, safetySettings, imageId, genPrompt, {
+				type: "object",
+				properties: {
+					prompts: {
+						type: "array",
+						items: {
+							type: "string",
+						},
 					},
 				},
-			},
-			required: ["prompts"],
-		});
-		if (response === null) {
-			return;
-		}
+				required: ["prompts"],
+			});
+			if (response === null) {
+				return;
+			}
 
-		const jsonResponse = JSON.parse(response) as { prompts: string[] };
-		setSuggestedPrompts(jsonResponse.prompts);
+			const jsonResponse = JSON.parse(response) as { prompts: string[] };
+			setSuggestedPrompts(jsonResponse.prompts);
+		} finally {
+			setIsSuggestQuestionsLoading(false);
+		}
 	}
 
 	async function onCustomClicked() {
 		setIsCustomLoading(true);
-		//const response = await doCustom(imageId, "");
-		let prompt =
-			"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
+		try {
+			let prompt =
+				"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
 
-		if (normalizedDraftCategories.length > 0) {
-			prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories}`;
-		}
-
-		for await (const response of doCustom(imageId, "questions", prompt)) {
-			if (response === null) {
-				return;
+			if (normalizedDraftCategories.length > 0) {
+				prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories}`;
 			}
 
-			setDraft((prev) => ({ ...prev, question: response }));
-		}
+			for await (const response of doCustom(imageId, "questions", prompt)) {
+				if (response === null) {
+					return;
+				}
 
-		setIsCustomLoading(false);
+				setDraft((prev) => ({ ...prev, question: response }));
+			}
+		} finally {
+			setIsCustomLoading(false);
+		}
 	}
 
 	async function onCustom2Clicked() {
 		setIsCustom2Loading(true);
+		try {
+			for await (const response of doCustom(
+				imageId,
+				//"answers",
+				//"mb3500zp",
+				"fancyfeast/llama-joycaption-beta-one-hf-llava",
+				draft.question,
+				5053, //5052,
+				//"You are a helpful image assistant.",
+				//"You are JoyCaption, a helpful AI assistant with vision capabilities.",
+				"You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
+				0.6,
+			)) {
+				if (response === null) {
+					return;
+				}
 
-		for await (const response of doCustom(
-			imageId,
-			//"answers",
-			//"mb3500zp",
-			"fancyfeast/llama-joycaption-beta-one-hf-llava",
-			draft.question,
-			5053, //5052,
-			//"You are a helpful image assistant.",
-			//"You are JoyCaption, a helpful AI assistant with vision capabilities.",
-			"You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
-			0.6,
-		)) {
-			if (response === null) {
-				return;
+				setDraft((prev) => ({ ...prev, answer: response }));
 			}
-
-			setDraft((prev) => ({ ...prev, answer: response }));
+		} finally {
+			setIsCustom2Loading(false);
 		}
-		setIsCustom2Loading(false);
 	}
 
 	function onPromptSelected(prompt: string) {
@@ -291,6 +331,20 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	function onAnswerSelected(answer: string) {
 		setDraft((prev) => ({ ...prev, answer: answer }));
 		setSuggestedAnswers(null);
+	}
+
+	function toggleSuggestionMenu(menu: Exclude<SuggestionMenu, null>) {
+		setActiveSuggestionMenu((prev) => (prev === menu ? null : menu));
+	}
+
+	function handleQuestionMenuAction(action: () => Promise<void>) {
+		setActiveSuggestionMenu(null);
+		void action();
+	}
+
+	function handleAnswerMenuAction(action: () => Promise<void>) {
+		setActiveSuggestionMenu(null);
+		void action();
 	}
 
 	function onAISettingsClicked() {
@@ -327,6 +381,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 	function handleEscape(e: React.KeyboardEvent<HTMLInputElement | HTMLTextAreaElement>) {
 		if (e.key === "Escape") {
+			setActiveSuggestionMenu(null);
 			(e.target as HTMLInputElement | HTMLTextAreaElement).blur();
 		}
 	}
@@ -338,18 +393,6 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				<div className="columnHeaderButtons">
 					<button onClick={onAISettingsClicked} title="Open AI Settings">
 						AI Settings
-					</button>
-					<button onClick={onCustomClicked} title="Ask the custom AI model for a suggested question">
-						Custom {isCustomLoading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
-					</button>
-					<button onClick={onCustom2Clicked} title="Ask the custom AI model for a suggested answer">
-						CustomA {isCustom2Loading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
-					</button>
-					<button onClick={onSuggestQuestionsClicked} title="Ask Gemini for a suggested question">
-						Suggest Qs
-					</button>
-					<button onClick={onSuggestAnswersClicked} title="Ask the list of AI models to suggest an answer">
-						Suggest As {isSuggestAnswersLoading ? <Icon icon={arrowSync24Filled} className="spinner" /> : null}
 					</button>
 					<button
 						onClick={onRevert}
@@ -398,27 +441,94 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 					<button
 						className="ai-suggest-button"
 						title="Ask the AI for a suggested category"
+						type="button"
 						onClick={onSuggestCategoryClicked}
 					>
 						<Icon icon={magicwand24Filled} />
 					</button>
 				</div>
-				<textarea
-					placeholder="Enter your question"
-					value={draft.question}
-					onChange={onQuestionChange}
-					onKeyDown={handleEscape}
-					tabIndex={2}
-				/>
-				<textarea
-					ref={answerTextareaRef}
-					placeholder="Enter the answer"
-					value={draft.answer}
-					onChange={onAnswerChange}
-					onKeyDown={handleEscape}
-					tabIndex={3}
-				/>
-				<div className="word-count-overlay"># words: {wordCount}</div>
+				<div className="vqa-textarea-field" ref={questionFieldRef}>
+					<textarea
+						placeholder="Enter your question"
+						value={draft.question}
+						onChange={onQuestionChange}
+						onKeyDown={handleEscape}
+						tabIndex={2}
+					/>
+					<button
+						className="ai-suggest-button"
+						title="Open question AI actions"
+						type="button"
+						onClick={() => toggleSuggestionMenu("question")}
+					>
+						<Icon
+							icon={isQuestionSuggestionLoading ? arrowSync24Filled : magicwand24Filled}
+							className={isQuestionSuggestionLoading ? "spinner" : undefined}
+						/>
+					</button>
+					{activeSuggestionMenu === "question" && (
+						<div className="vqa-ai-suggest-menu">
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isQuestionSuggestionLoading}
+								onClick={() => handleQuestionMenuAction(onCustomClicked)}
+							>
+								Custom
+							</button>
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isQuestionSuggestionLoading}
+								onClick={() => handleQuestionMenuAction(onSuggestQuestionsClicked)}
+							>
+								Suggest Qs
+							</button>
+						</div>
+					)}
+				</div>
+				<div className="vqa-textarea-field" ref={answerFieldRef}>
+					<textarea
+						ref={answerTextareaRef}
+						placeholder="Enter the answer"
+						value={draft.answer}
+						onChange={onAnswerChange}
+						onKeyDown={handleEscape}
+						tabIndex={3}
+					/>
+					<button
+						className="ai-suggest-button"
+						title="Open answer AI actions"
+						type="button"
+						onClick={() => toggleSuggestionMenu("answer")}
+					>
+						<Icon
+							icon={isAnswerSuggestionLoading ? arrowSync24Filled : magicwand24Filled}
+							className={isAnswerSuggestionLoading ? "spinner" : undefined}
+						/>
+					</button>
+					{activeSuggestionMenu === "answer" && (
+						<div className="vqa-ai-suggest-menu">
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isAnswerSuggestionLoading}
+								onClick={() => handleAnswerMenuAction(onCustom2Clicked)}
+							>
+								CustomA
+							</button>
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isAnswerSuggestionLoading}
+								onClick={() => handleAnswerMenuAction(onSuggestAnswersClicked)}
+							>
+								Suggest As
+							</button>
+						</div>
+					)}
+					<div className="word-count-overlay in-answer-field"># words: {wordCount}</div>
+				</div>
 			</div>
 		</div>
 	);

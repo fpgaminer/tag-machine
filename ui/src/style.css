@@ -859,12 +859,22 @@ li p {
     background-color: #2b2b2b;
     color: #f0f0f0;
     border: 1px solid #3f3f3f;
-    margin-bottom: 10px;
     border-radius: 5px;
+	padding: 10px;
+	box-sizing: border-box;
 }
 
-.vqaEditor textarea:last-child {
-    margin-bottom: 0;
+.vqa-textarea-field {
+	position: relative;
+	display: flex;
+	flex: 1;
+	min-height: 0;
+}
+
+.vqa-textarea-field textarea {
+	margin-bottom: 0;
+	padding-right: 56px;
+	padding-bottom: 42px;
 }
 
 .vqaEditor input[type="text"] {
@@ -878,13 +888,17 @@ li p {
 
 .vqaEditor .word-count-overlay {
 	position: absolute;
-	bottom: 10px;
-	right: 10px;
 	background-color: rgba(0, 0, 0, 0.2);
 	color: #f0f0f0;
 	padding: 3px;
 	border-radius: 5px;
 	font-size: 0.9em;
+	pointer-events: none;
+}
+
+.vqaEditor .word-count-overlay.in-answer-field {
+	bottom: 10px;
+	right: 62px;
 }
 
 
@@ -1427,6 +1441,7 @@ li p {
 .ai-suggest-button {
 	position: absolute;
 	right: 10px;
+	bottom: 10px;
 	background-color: rgba(0, 0, 0, 0.2);
 	border-radius: 50%;
 	border: none;
@@ -1437,11 +1452,17 @@ li p {
 	justify-content: center;
 	padding: 8px;
 	font-size: 1.2em;
+	z-index: 2;
 }
 
 .ai-suggest-button:hover {
 	background-color: rgba(255, 255, 255, 0.2);
 	color: #ffffff;
+}
+
+.ai-suggest-button:disabled {
+	cursor: default;
+	opacity: 0.6;
 }
 
 .category-input-container {
@@ -1452,6 +1473,53 @@ li p {
 
 .category-input-container input {
 	width: 100%;
+	padding-right: 50px;
+}
+
+.category-input-container .ai-suggest-button {
+	top: 50%;
+	bottom: auto;
+	transform: translateY(-50%);
+}
+
+.vqa-ai-suggest-menu {
+	position: absolute;
+	right: 10px;
+	bottom: 52px;
+	display: flex;
+	flex-direction: column;
+	min-width: 120px;
+	background-color: #303030;
+	border: 1px solid #4b4b4b;
+	border-radius: 6px;
+	box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+	overflow: hidden;
+	z-index: 3;
+}
+
+.vqa-ai-suggest-menu-item {
+	background-color: transparent;
+	border: none;
+	color: #f0f0f0;
+	cursor: pointer;
+	font-size: 0.85em;
+	font-weight: bold;
+	padding: 9px 12px;
+	text-align: left;
+	text-transform: uppercase;
+}
+
+.vqa-ai-suggest-menu-item:hover {
+	background-color: #4a4a4a;
+}
+
+.vqa-ai-suggest-menu-item:disabled {
+	color: #8e8e8e;
+	cursor: default;
+}
+
+.vqa-ai-suggest-menu-item:disabled:hover {
+	background-color: transparent;
 }
 
 .icon-red {
