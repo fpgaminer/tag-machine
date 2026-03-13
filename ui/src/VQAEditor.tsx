@@ -1,7 +1,7 @@
 import React, { useEffect, useState, useRef, useMemo, useCallback } from "react";
 import { addImageAttribute, errorMessageState, imageIdToUrl, ImageObject, popupsState, PopupStates, removeImageAttribute } from "./state";
 import SaveButton from "./SaveButton";
-import { GoogleGenerativeAI, GenerationConfig, SafetySetting } from "@google/generative-ai";
+import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
 import { MultiModel } from "./VQAAIConfigPopup";
 import arrowSync24Filled from "@iconify/icons-fluent/arrow-sync-24-filled";
@@ -252,12 +252,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			);
 
 			const response = await doGemini(systemInstruction, safetySettings, imageId, genPrompt, {
-				type: "object",
+				type: Type.OBJECT,
 				properties: {
 					prompts: {
-						type: "array",
+						type: Type.ARRAY,
 						items: {
-							type: "string",
+							type: Type.STRING,
 						},
 					},
 				},
@@ -618,7 +618,7 @@ async function doGemini(
 	safetySettings: SafetySetting[],
 	imageId: number,
 	question: string,
-	responseSchema: object | null,
+	responseSchema: Record<string, unknown> | null,
 ): Promise<string | null> {
 	try {
 		let apiKey = localStorage.getItem("GEMINI_API_KEY");
@@ -630,37 +630,44 @@ async function doGemini(
 			localStorage.setItem("GEMINI_API_KEY", apiKey);
 		}
 
-		const generationConfig = {
-			temperature: 1,
-			topP: 0.95,
-			topK: 40,
-			maxOutputTokens: 512,
-			responseMimeType: "text/plain",
-		} as GenerationConfig;
-
-		if (responseSchema !== null) {
-			generationConfig.responseSchema = responseSchema;
-			generationConfig.responseMimeType = "application/json";
-		}
-
 		const imageBase64 = await getImageAsBase64(imageId);
-		const genAI = new GoogleGenerativeAI(apiKey);
-		const model = genAI.getGenerativeModel({
-			model: "gemini-1.5-pro-002",
-			safetySettings,
-			generationConfig,
-			systemInstruction,
-		});
-		const imageArg = {
-			inlineData: {
-				data: imageBase64.base64,
-				mimeType: imageBase64.mimeType,
+		const ai = new GoogleGenAI({ apiKey });
+		const config = {
+			maxOutputTokens: 1024,
+			thinkingConfig: {
+				thinkingLevel: ThinkingLevel.MEDIUM,
 			},
+			mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
+			systemInstruction: [
+				{
+					text: systemInstruction,
+				}
+			],
+			responseMimeType: responseSchema ? "application/json" : "text/plain",
+			safetySettings,
+			...(responseSchema ? { responseJsonSchema: responseSchema } : {}),
 		};
 
-		const result = await model.generateContent([question, imageArg]);
+		const response = await ai.models.generateContent({
+			model: "gemini-3.1-pro-preview",
+			contents: [
+				{
+					role: "user",
+					parts: [
+						{ text: question },
+						{
+							inlineData: {
+								data: imageBase64.base64,
+								mimeType: imageBase64.mimeType,
+							},
+						},
+					],
+				},
+			],
+			config,
+		});
 
-		return result.response.text();
+		return response.text ?? "";
 	} catch (e) {
 		alert(`Error running Gemini: ${String(e)}`);
 		return "";
