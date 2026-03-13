@@ -33,9 +33,9 @@ function App() {
 				return <WikiPopup key={index} />;
 			case PopupStates.Upload:
 				return <UploadPopup key={index} />;
-			default:
-				throw new Error(`Unknown popup state: ${popup}`);
 		}
+
+		return assertNever(popup);
 	});
 
 	return (
@@ -60,6 +60,11 @@ function App() {
 			</div>
 		</div>
 	);
+}
+
+function assertNever(value: never): never {
+	void value;
+	throw new Error("Unknown popup state");
 }
 
 export default observer(App);

@@ -11,7 +11,7 @@ export interface TagAssociation {
 
 class TagAssociationState {
 	tags: TagAssociation[] = [];
-	serverDown: boolean = false;
+	serverDown = false;
 
 	constructor() {
 		makeAutoObservable(this);

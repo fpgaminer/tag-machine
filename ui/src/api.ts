@@ -17,17 +17,15 @@ export interface ApiImage {
 	caption: string;
 }
 
-interface ApiTagSuggestions {
-	[key: string]: number;
-}
+type ApiTagSuggestions = Record<string, number>;
 
 interface ApiCaptionSuggestion {
 	caption: string;
 }
 
 export interface ApiTagMappings {
-	aliases: { [key: string]: string };
-	implications: { [key: string]: string[] };
+	aliases: Record<string, string>;
+	implications: Record<string, string[]>;
 	blacklist: string[];
 	deprecations: string[];
 }

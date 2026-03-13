@@ -121,7 +121,7 @@ class TagListState {
 		// Check if the tag already exists
 		const existingTag = this.getTagByName(name);
 
-		if (existingTag !== null && existingTag.active) {
+		if (existingTag?.active) {
 			errorMessageState.setErrorMessage(`Tag ${name} already exists`);
 			return;
 		}

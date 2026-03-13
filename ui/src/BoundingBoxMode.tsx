@@ -120,7 +120,8 @@ function BoundingBoxMode() {
 						</div>
 						<div className="control">
 							<button className="control-button" title="Suggest bounding boxes" onClick={onSuggestBoxes}>
-								Suggest {fetchingBoundingBoxes ? <Icon icon="fluent:arrow-sync-24-filled" className="icon" width="24" /> : null}
+								Suggest{" "}
+								{fetchingBoundingBoxes ? <Icon icon="fluent:arrow-sync-24-filled" className="icon" width="24" /> : null}
 							</button>
 						</div>
 						<div className="control">

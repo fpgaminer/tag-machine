@@ -6,13 +6,13 @@ import { currentImageState } from "./CurrentImage";
 const MAX_SEARCH_HISTORY = 10;
 
 class ImageListState {
-	private _currentSearch: string = "";
+	private _currentSearch = "";
 	imagesById: Map<number, ImageObject> = new Map<number, ImageObject>();
 	imagesByHash: Map<string, ImageObject> = new Map<string, ImageObject>();
 	searchList: Uint32Array | null = null;
 	searchHistory: string[] = [];
 	private version = 0; // Used to keep track of async search results
-	initialSearchPerformed: boolean = false; // During initialization we wait until we're logged in, and then we can perform the initial search
+	initialSearchPerformed = false; // During initialization we wait until we're logged in, and then we can perform the initial search
 
 	constructor() {
 		this.searchHistory = JSON.parse(localStorage.getItem("searchHistory") ?? "[]") as string[];

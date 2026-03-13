@@ -9,7 +9,7 @@ export class CurrentImageState {
 	private _displayedImageId: number | null = null;
 	suggestedTags: TagSuggestion[] | null = null;
 	suggestedTagsInFlight = false;
-	serverDown: boolean = false;
+	serverDown = false;
 	private persistDisposer: (() => void) | null = null;
 
 	constructor() {
@@ -47,14 +47,6 @@ export class CurrentImageState {
 		return this._imageId;
 	}
 
-	get displayedImageId(): number | null {
-		return this._displayedImageId;
-	}
-
-	set displayedImageId(image_id: number | null) {
-		this._displayedImageId = image_id;
-	}
-
 	set imageId(image_id: number | null) {
 		const changed = this._imageId != image_id;
 		this._imageId = image_id;
@@ -68,6 +60,14 @@ export class CurrentImageState {
 				void imageListState.fetchImage(image_id);
 			}
 		}
+	}
+
+	get displayedImageId(): number | null {
+		return this._displayedImageId;
+	}
+
+	set displayedImageId(image_id: number | null) {
+		this._displayedImageId = image_id;
 	}
 
 	dispose() {

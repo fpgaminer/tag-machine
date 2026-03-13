@@ -94,7 +94,7 @@ export class ImageObject {
 	singularAttribute(key: string): string | null {
 		const values = this.attributes.get(key);
 
-		if (values === undefined || values.size !== 1) {
+		if (values?.size !== 1) {
 			return null;
 		}
 
@@ -230,7 +230,7 @@ export enum PopupStates {
 }
 
 class PopupsState {
-	popups: Set<PopupStates> = new Set();
+	popups = new Set<PopupStates>();
 
 	constructor() {
 		makeAutoObservable(this);
@@ -248,7 +248,7 @@ class PopupsState {
 export const popupsState = new PopupsState();
 
 class FavoriteTagsState {
-	_favoriteTags: Set<string> = new Set(JSON.parse(localStorage.getItem("favoriteTags") || "[]") as string[]);
+	_favoriteTags = new Set<string>(JSON.parse(localStorage.getItem("favoriteTags") ?? "[]") as string[]);
 
 	constructor() {
 		makeAutoObservable(this);
