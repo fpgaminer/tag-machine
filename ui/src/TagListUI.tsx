@@ -2,11 +2,12 @@ import { popupsState, PopupStates, Tag, toggleImageTag } from "./state";
 import { observer } from "mobx-react";
 import { currentImageState } from "./state/CurrentImage";
 import { wikiPopupState } from "./WikiPopup";
+import React from "react";
 
 interface TagListUIProps {
 	tags: Tag[];
 	formatter?: (tag: Tag) => string;
-	getControls?: (tag: Tag) => JSX.Element;
+	getControls?: (tag: Tag) => React.ReactNode;
 	readonly?: boolean;
 }
 

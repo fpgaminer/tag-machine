@@ -86,7 +86,7 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 		}
 	}, [url, userToken]);
 
-	function toLink(name: string, value: string | string[]): JSX.Element {
+	function toLink(name: string, value: string | string[]): React.ReactNode {
 		if (value instanceof Array && value.length != 1) {
 			return <span>{value}</span>;
 		} else if (value instanceof Array) {
