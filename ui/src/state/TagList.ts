@@ -7,6 +7,7 @@ export enum TagListStateStatus {
 	Idle,
 	Fetching,
 	Success,
+	Error,
 }
 
 class TagListState {
@@ -16,83 +17,71 @@ class TagListState {
 	blacklistAndDeprecations: Set<string> | null = null;
 	status: TagListStateStatus = TagListStateStatus.Idle;
 
+	private fetchRequestId = 0;
+	private fetchAbortController: AbortController | null = null;
+
 	constructor() {
-		makeAutoObservable(this);
+		makeAutoObservable(this, {}, { autoBind: true });
 	}
 
 	async fetchTagList() {
-		let data: api.ApiTag[];
-		let mappingData: api.ApiTagMappings;
+		const requestId = ++this.fetchRequestId;
+
+		// Abort any previous in-flight fetch
+		this.fetchAbortController?.abort();
+		const abortController = new AbortController();
+		this.fetchAbortController = abortController;
 
 		this.setStatus(TagListStateStatus.Fetching);
 
 		try {
-			data = await api.listTags();
+			const [data, mappingData] = await Promise.all([
+				api.listTags({ signal: abortController.signal }),
+				api.getTagMappings({ signal: abortController.signal }),
+			]);
+
+			// Ignore stale responses
+			if (requestId !== this.fetchRequestId) {
+				return;
+			}
+
+			runInAction(() => {
+				this.applyFetchedData(data, mappingData);
+			});
 		} catch (error) {
-			errorMessageState.setErrorMessage(`Error fetching tag list: ${error as string}, will retry in 5 seconds`);
+			// Ignore aborted requests
+			if (abortController.signal.aborted) {
+				return;
+			}
+
+			// Ignore stale failures
+			if (requestId !== this.fetchRequestId) {
+				return;
+			}
+
+			runInAction(() => {
+				this.status = TagListStateStatus.Error;
+				errorMessageState.setErrorMessage(`Error fetching tag list: ${String(error)}, will retry in 5 seconds`);
+			});
 
 			// Retry after a delay
-			void new Promise((resolve) => setTimeout(resolve, 5000));
+			await sleep(5000);
 
-			return;
+			// Only retry if no newer fetch started in the meantime
+			if (requestId === this.fetchRequestId) {
+				void this.fetchTagList();
+			}
 		}
-
-		const dataTags = data.map((tag) => new Tag(tag.id, tag.name, tag.active));
-
-		try {
-			mappingData = await api.getTagMappings();
-		} catch (error) {
-			errorMessageState.setErrorMessage(`Error fetching tag mappings: ${error as string}, will retry in 5 seconds`);
-
-			// Retry after a delay
-			void new Promise((resolve) => setTimeout(resolve, 5000));
-
-			return;
-		}
-
-		const aliases = new Map<string, string>(Object.entries(mappingData.aliases));
-		const implications = new Map<string, Set<string>>(
-			Object.entries(mappingData.implications).map(([key, value]) => [key, new Set<string>(value)]),
-		);
-		const blacklist = new Set<string>(mappingData.blacklist);
-		const deprecations = new Set<string>(mappingData.deprecations);
-		const blacklistAndDeprecations = new Set<string>([...blacklist, ...deprecations]);
-
-		runInAction(() => {
-			this.tags = dataTags;
-			this.aliases = aliases;
-			this.implications = implications;
-			this.blacklistAndDeprecations = blacklistAndDeprecations;
-			this.status = TagListStateStatus.Success;
-		});
 	}
 
 	get tagNameToTagMap(): Map<string, Tag> {
-		if (this.tags === null) {
-			return new Map<string, Tag>();
-		}
-
-		const tagMap = new Map<string, Tag>();
-
-		for (const tag of this.tags) {
-			tagMap.set(tag.name, tag);
-		}
-
-		return tagMap;
+		const tags = this.tags ?? [];
+		return new Map(tags.map((tag) => [tag.name, tag]));
 	}
 
 	get tagIdToTagMap(): Map<number, Tag> {
-		if (this.tags === null) {
-			return new Map<number, Tag>();
-		}
-
-		const tagMap = new Map<number, Tag>();
-
-		for (const tag of this.tags) {
-			tagMap.set(tag.id, tag);
-		}
-
-		return tagMap;
+		const tags = this.tags ?? [];
+		return new Map(tags.map((tag) => [tag.id, tag]));
 	}
 
 	get fuse(): Fuse<Tag> | null {
@@ -104,13 +93,7 @@ class TagListState {
 	}
 
 	getTagByName(name: string): Tag | null {
-		const tagMap = this.tagNameToTagMap;
-
-		if (tagMap === null) {
-			return null;
-		}
-
-		return tagMap.get(name) ?? null;
+		return this.tagNameToTagMap.get(name) ?? null;
 	}
 
 	async addTag(name: string) {
@@ -134,13 +117,34 @@ class TagListState {
 			return;
 		}
 
-		// Update
-		await this.fetchTagList();
+		// Refetch the tag list to get the new tag and ensure consistency
+		void this.fetchTagList();
 	}
 
 	setStatus(status: TagListStateStatus) {
 		this.status = status;
 	}
+
+	private applyFetchedData(data: api.ApiTag[], mappingData: api.ApiTagMappings) {
+		const dataTags = data.map((tag) => new Tag(tag.id, tag.name, tag.active));
+		const aliases = new Map<string, string>(Object.entries(mappingData.aliases));
+		const implications = new Map<string, Set<string>>(
+			Object.entries(mappingData.implications).map(([key, value]) => [key, new Set(value)]),
+		);
+		const blacklist = new Set(mappingData.blacklist);
+		const deprecations = new Set(mappingData.deprecations);
+		const blacklistAndDeprecations = new Set([...blacklist, ...deprecations]);
+
+		this.tags = dataTags;
+		this.aliases = aliases;
+		this.implications = implications;
+		this.blacklistAndDeprecations = blacklistAndDeprecations;
+		this.status = TagListStateStatus.Success;
+	}
+}
+
+function sleep(ms: number): Promise<void> {
+	return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export const tagListState = new TagListState();

@@ -90,8 +90,11 @@ export async function authenticatedFetch(input: RequestInfo | URL, init?: Reques
 	return fetch(input, init);
 }
 
-export async function listTags(): Promise<ApiTag[]> {
-	const response = await authenticatedFetch(`${API_URL}/tags`);
+export async function listTags(options?: { signal?: AbortSignal }): Promise<ApiTag[]> {
+	const response = await authenticatedFetch(`${API_URL}/tags`, {
+		signal: options?.signal,
+	});
+
 	if (!response.ok) {
 		throw new Error(`Failed to get tags: ${response.status}`);
 	}
@@ -335,8 +338,10 @@ export async function countTokens(text: string, tokenizer: TokenizerType): Promi
 	return jsonObject.total_tokens;
 }
 
-export async function getTagMappings(): Promise<ApiTagMappings> {
-	const response = await authenticatedFetch(`${API_URL}/tag_mappings`);
+export async function getTagMappings(options?: { signal?: AbortSignal }): Promise<ApiTagMappings> {
+	const response = await authenticatedFetch(`${API_URL}/tag_mappings`, {
+		signal: options?.signal,
+	});
 
 	if (!response.ok) {
 		throw new Error(`Failed to get tag mappings: ${response.status}`);
