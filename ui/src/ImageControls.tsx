@@ -1,7 +1,4 @@
-import chevronLeft24Filled from "@iconify/icons-fluent/chevron-left-24-filled";
-import chevronRight24Filled from "@iconify/icons-fluent/chevron-right-24-filled";
-import chevronDoubleRight24Filled from "@iconify/icons-fluent/chevron-double-right-16-filled";
-import { Icon } from "@iconify/react";
+import { Icon } from "@iconify-icon/react";
 import { observer } from "mobx-react";
 import { useEffect, useRef, useState } from "react";
 import { imageListState } from "./state/ImageList";
@@ -149,17 +146,17 @@ function ImageControls({ children }: ImageControlsProps) {
 				{children}
 				<div className="control">
 					<button className="control-button" onClick={onPrevClicked} title="Previous image">
-						<Icon icon={chevronLeft24Filled} className="icon" width="24" />
+						<Icon icon="fluent:chevron-left-24-filled" className="icon" width="24" />
 					</button>
 				</div>
 				<div className="control">
 					<button className="control-button" onClick={onNextClicked} title="Next image">
-						<Icon icon={chevronRight24Filled} className="icon" width="24" />
+						<Icon icon="fluent:chevron-right-24-filled" className="icon" width="24" />
 					</button>
 				</div>
 				<div className="control">
 					<button className="control-button" onClick={onNextUntaggedClicked} title="Next untagged image">
-						<Icon icon={chevronDoubleRight24Filled} className="icon" width="24" />
+						<Icon icon="fluent:chevron-double-right-16-filled" className="icon" width="24" />
 					</button>
 				</div>
 			</div>

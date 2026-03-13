@@ -4,9 +4,7 @@ import SaveButton from "./SaveButton";
 import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
 import { MultiModel } from "./VQAAIConfigPopup";
-import arrowSync24Filled from "@iconify/icons-fluent/arrow-sync-24-filled";
-import magicwand24Filled from "@iconify/icons-fluent/magic-wand-24-filled";
-import { Icon } from "@iconify/react";
+import { Icon } from "@iconify-icon/react";
 import { observer } from "mobx-react";
 import OpenAI from "openai";
 import useLocalStorageState from "./useLocalStateStorage";
@@ -444,7 +442,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						type="button"
 						onClick={onSuggestCategoryClicked}
 					>
-						<Icon icon={magicwand24Filled} />
+						<Icon icon="fluent:magic-wand-24-filled" />
 					</button>
 				</div>
 				<div className="vqa-textarea-field" ref={questionFieldRef}>
@@ -462,7 +460,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						onClick={() => toggleSuggestionMenu("question")}
 					>
 						<Icon
-							icon={isQuestionSuggestionLoading ? arrowSync24Filled : magicwand24Filled}
+							icon={isQuestionSuggestionLoading ? "fluent:arrow-sync-24-filled" : "fluent:magic-wand-24-filled"}
 							className={isQuestionSuggestionLoading ? "spinner" : undefined}
 						/>
 					</button>
@@ -503,7 +501,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						onClick={() => toggleSuggestionMenu("answer")}
 					>
 						<Icon
-							icon={isAnswerSuggestionLoading ? arrowSync24Filled : magicwand24Filled}
+							icon={isAnswerSuggestionLoading ? "fluent:arrow-sync-24-filled" : "fluent:magic-wand-24-filled"}
 							className={isAnswerSuggestionLoading ? "spinner" : undefined}
 						/>
 					</button>

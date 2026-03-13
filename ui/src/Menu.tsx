@@ -1,10 +1,5 @@
 import { useObserver } from "mobx-react";
-import add24Filled from "@iconify/icons-fluent/add-24-filled";
-import arrowUpload24Filled from "@iconify/icons-fluent/arrow-upload-24-filled";
-import info24Regular from "@iconify/icons-fluent/info-24-regular";
-import arrowDownload4Filled from "@iconify/icons-fluent/arrow-download-24-filled";
-import settings24Regular from "@iconify/icons-fluent/settings-24-regular";
-import { Icon } from "@iconify/react";
+import { Icon } from "@iconify-icon/react";
 import { tagListState } from "./state/TagList";
 import React, { useEffect } from "react";
 import { imageListState } from "./state/ImageList";
@@ -101,7 +96,7 @@ function Menu() {
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={onDownloadClicked}>
-					<Icon icon={arrowDownload4Filled} />
+					<Icon icon="fluent:arrow-download-24-filled" />
 				</button>
 			</div>
 			<div className="menu-item">
@@ -122,19 +117,19 @@ function Menu() {
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={uploadClicked}>
-					<Icon icon={arrowUpload24Filled} />
+					<Icon icon="fluent:arrow-upload-24-filled" />
 					<p>Upload</p>
 				</button>
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={imageInfoClicked}>
-					<Icon icon={info24Regular} />
+					<Icon icon="fluent:info-24-regular" />
 					<p>Image Info</p>
 				</button>
 			</div>
 			<div className="menu-item">
 				<button className="menu-button" onClick={onAddTagClicked}>
-					<Icon icon={add24Filled} />
+					<Icon icon="fluent:add-24-filled" />
 					<p>Add Tag</p>
 				</button>
 			</div>
@@ -159,7 +154,7 @@ function Menu() {
 			) : null}
 			<div className="menu-item">
 				<button className="menu-button" onClick={userSettingsClicked}>
-					<Icon icon={settings24Regular} />
+					<Icon icon="fluent:settings-24-regular" />
 				</button>
 			</div>
 		</div>

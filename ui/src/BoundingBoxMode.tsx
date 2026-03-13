@@ -6,11 +6,7 @@ import { currentImageState } from "./state/CurrentImage";
 import { imageListState } from "./state/ImageList";
 import { addImageAttribute, imageResolutionState, toggleImageTag } from "./state";
 import { tagListState } from "./state/TagList";
-import arrowSync24Filled from "@iconify/icons-fluent/arrow-sync-24-filled";
-import { Icon } from "@iconify/react/dist/iconify.js";
-import arrowUndo24Filled from "@iconify/icons-fluent/arrow-undo-24-filled";
-import imageAltText24Filled from "@iconify/icons-fluent/image-alt-text-24-filled";
-import imageAltText24Regular from "@iconify/icons-fluent/image-alt-text-24-regular";
+import { Icon } from "@iconify-icon/react";
 
 function BoundingBoxMode() {
 	const currentImage = currentImageState.image;
@@ -124,7 +120,7 @@ function BoundingBoxMode() {
 						</div>
 						<div className="control">
 							<button className="control-button" title="Suggest bounding boxes" onClick={onSuggestBoxes}>
-								Suggest {fetchingBoundingBoxes ? <Icon icon={arrowSync24Filled} className="icon" width="24" /> : null}
+								Suggest {fetchingBoundingBoxes ? <Icon icon="fluent:arrow-sync-24-filled" className="icon" width="24" /> : null}
 							</button>
 						</div>
 						<div className="control">
@@ -139,7 +135,7 @@ function BoundingBoxMode() {
 								onClick={onNoWatermarkClicked}
 							>
 								<Icon
-									icon={noWatermarkTagged ? imageAltText24Filled : imageAltText24Regular}
+									icon={noWatermarkTagged ? "fluent:image-alt-text-24-filled" : "fluent:image-alt-text-24-regular"}
 									className={`icon ${noWatermarkTagged ? "icon-red" : ""}`}
 									width="24"
 								/>
@@ -147,7 +143,7 @@ function BoundingBoxMode() {
 						</div>
 						<div className="control">
 							<button className="control-button" title="Revert bounding boxes" onClick={onRevertBoundingBoxes}>
-								<Icon icon={arrowUndo24Filled} className="icon" width="24" />
+								<Icon icon="fluent:arrow-undo-24-filled" className="icon" width="24" />
 							</button>
 						</div>
 						<div className="control">

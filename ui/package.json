@@ -23,8 +23,7 @@
 		"react-zoom-pan-pinch": "^3.7.0"
 	},
 	"devDependencies": {
-		"@iconify/icons-fluent": "^1.2.38",
-		"@iconify/react": "^6.0.2",
+		"@iconify-icon/react": "^3.0.3",
 		"@types/node": "^25.5.0",
 		"@types/react": "^19.2.14",
 		"@types/react-dom": "^19.2.3",
