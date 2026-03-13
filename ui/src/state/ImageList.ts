@@ -12,7 +12,6 @@ class ImageListState {
 	searchList: Uint32Array | null = null;
 	searchHistory: string[] = [];
 	private version = 0; // Used to keep track of async search results
-	initialSearchPerformed = false; // During initialization we wait until we're logged in, and then we can perform the initial search
 
 	constructor() {
 		this.searchHistory = JSON.parse(localStorage.getItem("searchHistory") ?? "[]") as string[];
@@ -210,10 +209,6 @@ class ImageListState {
 		const clamped = Math.min(Math.max(0, index), this.searchList.length - 1);
 
 		return this.searchList[clamped];
-	}
-
-	setInitialSearchPerformed() {
-		this.initialSearchPerformed = true;
 	}
 }
 

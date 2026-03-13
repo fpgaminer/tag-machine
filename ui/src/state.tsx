@@ -594,34 +594,21 @@ autorun(() => {
 	}
 });
 
-// Fetch metadata when logging in
-/*autorun(() => {
-	if (authState.loggedIn === true && tagListState.status === TagListStateStatus.Idle) {
-		tagListState.fetchTagList();
-	}
-
-	if (authState.loggedIn === true && imageListState.initialSearchPerformed === false) {
-		runInAction(() => {
-			imageListState.performSearch().then(() => {
-				imageListState.setInitialSearchPerformed();
-			});
-		});
-	}
-});*/
-
+// When transitioning from logged out to logged in, fetch the tag list and perform a search to populate the image list
 reaction(
 	() => authState.loggedIn,
 	(loggedIn) => {
 		if (loggedIn === true) {
 			void tagListState.fetchTagList();
 		}
+	},
+);
 
+reaction(
+	() => authState.loggedIn,
+	(loggedIn) => {
 		if (loggedIn === true) {
-			runInAction(() => {
-				void imageListState.performSearch().then(() => {
-					imageListState.setInitialSearchPerformed();
-				});
-			});
+			void imageListState.performSearch();
 		}
 	},
 );
