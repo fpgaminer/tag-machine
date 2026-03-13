@@ -1,58 +1,78 @@
-import { fixupConfigRules, fixupPluginRules } from "@eslint/compat";
-import typescriptEslint from "@typescript-eslint/eslint-plugin";
-import tsParser from "@typescript-eslint/parser";
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactPlugin from "eslint-plugin-react";
+import reactHooks from "eslint-plugin-react-hooks";
+import reactCompiler from "eslint-plugin-react-compiler";
+import eslintConfigPrettier from "eslint-config-prettier";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import js from "@eslint/js";
-import { FlatCompat } from "@eslint/eslintrc";
-import reactCompiler from "eslint-plugin-react-compiler";
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
-const compat = new FlatCompat({
-    baseDirectory: __dirname,
-    recommendedConfig: js.configs.recommended,
-    allConfig: js.configs.all
-});
 
-export default [...fixupConfigRules(compat.extends(
-    "eslint:recommended",
-    "plugin:@typescript-eslint/recommended",
-    "plugin:@typescript-eslint/recommended-requiring-type-checking",
-    "plugin:react/recommended",
-    "plugin:react/jsx-runtime",
-    "plugin:react-hooks/recommended",
-    "plugin:prettier/recommended",
-)), {
-    plugins: {
-        "@typescript-eslint": fixupPluginRules(typescriptEslint),
-        "react-compiler": reactCompiler,
-    },
+export default tseslint.config(
+	{
+		ignores: ["dist/**", "node_modules/**"],
+	},
 
-    languageOptions: {
-        parser: tsParser,
-        ecmaVersion: 5,
-        sourceType: "script",
+	js.configs.recommended,
+	...tseslint.configs.recommendedTypeChecked,
+	...tseslint.configs.stylisticTypeChecked,
 
-        parserOptions: {
-            tsconfigRootDir: "./",
-            project: ["./tsconfig.json"],
-        },
-    },
+	{
+		languageOptions: {
+			parserOptions: {
+				projectService: true,
+				tsconfigRootDir: __dirname,
+			},
+		},
+	},
 
-    settings: {
-        react: {
-            version: "detect",
-        },
-    },
+	reactPlugin.configs.flat.recommended,
+	reactPlugin.configs.flat["jsx-runtime"],
 
-    rules: {
-        "@typescript-eslint/no-misused-promises": ["error", {
-            checksVoidReturn: {
-                arguments: false,
-                attributes: false,
-            },
-        }],
-        "react-compiler/react-compiler": "error",
-    },
-}];
+	{
+		files: [
+			"**/*.{js,jsx,mjs,cjs}",
+			"eslint.config.mjs",
+			"*.config.ts",
+			"*.config.mts",
+			"*.config.cts",
+			"vite.config.ts",
+		],
+		extends: [tseslint.configs.disableTypeChecked],
+	},
+
+	{
+		plugins: {
+			"react-hooks": reactHooks,
+			"react-compiler": reactCompiler,
+		},
+		rules: {
+			...reactHooks.configs.recommended.rules,
+		},
+		settings: {
+			react: {
+				version: "detect",
+			},
+		},
+	},
+
+	{
+		files: ["src/**/*.{ts,tsx}"],
+		rules: {
+			"react-compiler/react-compiler": "error",
+			"@typescript-eslint/no-misused-promises": [
+				"error",
+				{
+					checksVoidReturn: {
+						arguments: false,
+						attributes: false,
+					},
+				},
+			],
+		},
+	},
+
+	eslintConfigPrettier,
+);
