@@ -10,7 +10,6 @@
 	},
 	"dependencies": {
 		"@google/genai": "^1.45.0",
-		"@huggingface/tokenizers": "^0.1.2",
 		"@noble/hashes": "^2.0.1",
 		"@types/cloudflare-turnstile": "^0.2.2",
 		"exifr": "^7.1.3",

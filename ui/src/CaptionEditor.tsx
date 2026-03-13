@@ -3,36 +3,9 @@ import { currentImageState } from "./state/CurrentImage";
 import React, { useEffect, useState } from "react";
 import { autorun } from "mobx";
 import { addImageAttribute, suggestCaption } from "./state";
-import { tokenizeString } from "./Llama3TokenizerProxy";
-import { Tokenizer } from "@huggingface/tokenizers";
+import * as api from "./api";
 
-const modelId = "openai/clip-vit-large-patch14";
-let clipTokenizerPromise: Promise<Tokenizer> | null = null;
-
-async function fetchJsonObject(url: string): Promise<Record<string, unknown>> {
-	const response = await fetch(url);
-
-	if (!response.ok) {
-		throw new Error(`Failed to fetch ${url}: ${response.status}`);
-	}
-
-	const json: unknown = await response.json();
-
-	if (json === null || typeof json !== "object" || Array.isArray(json)) {
-		throw new Error(`Invalid JSON structure from ${url}`);
-	}
-
-	return json as Record<string, unknown>;
-}
-
-function getClipTokenizer(): Promise<Tokenizer> {
-	clipTokenizerPromise ??= Promise.all([
-		fetchJsonObject(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`),
-		fetchJsonObject(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`),
-	]).then(([tokenizerJson, tokenizerConfig]) => new Tokenizer(tokenizerJson, tokenizerConfig));
-
-	return clipTokenizerPromise;
-}
+const TOKEN_COUNT_DEBOUNCE_MS = 150;
 
 enum CaptionMode {
 	StandardCaption = "StandardCaption",
@@ -76,7 +49,7 @@ function CaptionEditor() {
 	const imageTrainingPrompt = image ? image.trainingPrompt : null;
 	const [captionTone, setCaptionTone] = useState<CaptionTone>("formal");
 	const [captionLength, setCaptionLength] = useState<CaptionLength>(null);
-	const [tokens, setTokens] = useState<string[]>([]);
+	const [tokenCount, setTokenCount] = useState<number | null>(null);
 	const [clipTokenCount, setClipTokenCount] = useState<number | null>(null);
 
 	// Save button state
@@ -102,42 +75,31 @@ function CaptionEditor() {
 
 	useEffect(() => {
 		const text = localCaption;
-		const fetchTokens = async () => {
-			try {
-				const { resultText, resultTokens } = await tokenizeString(text);
-				if (resultText === text) {
-					setTokens(resultTokens);
-					return;
-				}
-			} catch (e) {
-				console.error(e);
-			}
-		};
-
-		void fetchTokens();
-	}, [localCaption]);
-
-	useEffect(() => {
 		let active = true;
 
-		void getClipTokenizer()
-			.then((tokenizer) => {
-				if (!active) {
-					return;
-				}
+		const timeoutId = window.setTimeout(() => {
+			void Promise.all([api.countTokens(text, "llama3"), api.countTokens(text, "clip")])
+				.then(([nextTokenCount, nextClipTokenCount]) => {
+					if (!active) {
+						return;
+					}
 
-				setClipTokenCount(tokenizer.tokenize(localCaption, { add_special_tokens: false }).length);
-			})
-			.catch((error: unknown) => {
-				console.error("Failed to load CLIP tokenizer", error);
+					setTokenCount(nextTokenCount);
+					setClipTokenCount(nextClipTokenCount);
+				})
+				.catch((error: unknown) => {
+					console.error("Failed to count caption tokens", error);
 
-				if (active) {
-					setClipTokenCount(null);
-				}
-			});
+					if (active) {
+						setTokenCount(null);
+						setClipTokenCount(null);
+					}
+				});
+		}, TOKEN_COUNT_DEBOUNCE_MS);
 
 		return () => {
 			active = false;
+			window.clearTimeout(timeoutId);
 		};
 	}, [localCaption]);
 
@@ -303,7 +265,7 @@ function CaptionEditor() {
 			<div className="remainingSpace captionEditor">
 				<textarea value={localCaption} onChange={onCaptionChange} />
 				<div className="tokenCount">
-					{tokens.length} tokens, {clipTokenCount ?? "..."} clip tokens
+					{tokenCount ?? "..."} tokens, {clipTokenCount ?? "..."} clip tokens
 				</div>
 			</div>
 		</div>

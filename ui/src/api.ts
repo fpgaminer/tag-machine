@@ -23,6 +23,10 @@ interface ApiCaptionSuggestion {
 	caption: string;
 }
 
+interface ApiTokenizeResponse {
+	total_tokens: number;
+}
+
 export interface ApiTagMappings {
 	aliases: Record<string, string>;
 	implications: Record<string, string[]>;
@@ -51,6 +55,7 @@ export interface ApiTask {
 
 export type SearchSelect = "id" | "hash" | "tags" | "attributes";
 export type TaskStatus = "waiting" | "in_progress" | "done";
+export type TokenizerType = "llama3" | "clip";
 
 export class HttpError extends Error {
 	statusCode: number;
@@ -308,6 +313,26 @@ export async function getImageCaptionSuggestion(hash: string, prompt: string): P
 
 	const jsonObject = (await response.json()) as ApiCaptionSuggestion;
 	return jsonObject.caption;
+}
+
+export async function countTokens(text: string, tokenizer: TokenizerType): Promise<number> {
+	const response = await authenticatedFetch(`${API_URL}/tokenize`, {
+		method: "POST",
+		headers: {
+			"Content-Type": "application/json",
+		},
+		body: JSON.stringify({
+			text,
+			tokenizer,
+		}),
+	});
+
+	if (!response.ok) {
+		throw new Error(`Failed to count tokens: ${response.status}: ${await response.text()}`);
+	}
+
+	const jsonObject = (await response.json()) as ApiTokenizeResponse;
+	return jsonObject.total_tokens;
 }
 
 export async function getTagMappings(): Promise<ApiTagMappings> {
