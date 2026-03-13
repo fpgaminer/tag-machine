@@ -3,10 +3,16 @@ import { currentImageState } from "./state/CurrentImage";
 import React, { useEffect, useState } from "react";
 import { autorun } from "mobx";
 import { addImageAttribute, suggestCaption } from "./state";
-import { AutoTokenizer } from "@xenova/transformers";
 import { tokenizeString } from "./Llama3TokenizerProxy";
+import { Tokenizer } from "@huggingface/tokenizers";
 
-const tokenizer = await AutoTokenizer.from_pretrained("openai/clip-vit-large-patch14");
+const modelId = "openai/clip-vit-large-patch14";
+const [tokenizerJson, tokenizerConfig] = await Promise.all([
+	fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer.json`).then((r) => r.json()),
+	fetch(`https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`).then((r) => r.json()),
+]);
+
+const tokenizer = new Tokenizer(tokenizerJson, tokenizerConfig);
 
 enum CaptionMode {
 	StandardCaption = "StandardCaption",
@@ -77,7 +83,7 @@ function CaptionEditor() {
 	const isUnsaved = localCaption != (currentText ?? "");
 
 	// Count tokens
-	const clip_tokens = tokenizer.encode(localCaption, null, { add_special_tokens: false });
+	const clip_tokens = tokenizer.tokenize(localCaption, { add_special_tokens: false });
 
 	useEffect(() => {
 		const text = localCaption;

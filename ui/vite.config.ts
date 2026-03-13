@@ -12,16 +12,12 @@ export default defineConfig(({ mode }) => {
 			port: 3000,
 			strictPort: true,
 			host: true,
+			allowedHosts: ["tagmachine.selfserv.net"],
 		},
 		build: {
 			//target: ["es2021", "chrome100", "safari14"],
 			//minify: !process.env.TAURI_DEBUG ? "esbuild" : false,
 			//sourcemap: !!process.env.TAURI_DEBUG,
-		},
-		esbuild: {
-			supported: {
-				'top-level-await': true,
-			}
 		},
 	};
 });
