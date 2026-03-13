@@ -91,7 +91,7 @@ function UploadPopup() {
 				? {
 						type: "warning",
 						message: statusParts.join(" "),
-				  }
+					}
 				: null,
 		);
 	}
@@ -110,8 +110,8 @@ function UploadPopup() {
 		setUploadProgress({ current: 0, total: selectedFiles.length });
 
 		const trimmedSource = source.trim();
-		const uploadFailures: Array<{ file: File; reason: string }> = [];
-		const sourceFailures: Array<{ name: string; reason: string }> = [];
+		const uploadFailures: { file: File; reason: string }[] = [];
+		const sourceFailures: { name: string; reason: string }[] = [];
 		let uploadedCount = 0;
 
 		for (const [index, file] of selectedFiles.entries()) {

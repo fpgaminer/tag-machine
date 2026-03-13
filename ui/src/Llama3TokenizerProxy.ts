@@ -17,25 +17,27 @@ export function useWorker(text: string) {
 	}
 }
 
-export function tokenizeString(text: string): Promise<{ resultText: string; resultTokens: string[] }> {
-	return new Promise((resolve, reject) => {
-		void initializeWorker();
+export async function tokenizeString(text: string): Promise<{ resultText: string; resultTokens: string[] }> {
+	await initializeWorker();
 
+	if (!worker) {
+		throw new Error("Worker not initialized yet");
+	}
+
+	const activeWorker = worker;
+
+	return new Promise((resolve) => {
 		function handleWorkerMessage(event: { data: { resultText: string; resultTokens: string[] } }) {
 			const { resultText, resultTokens } = event.data;
 
 			if (resultText === text) {
-				worker?.removeEventListener("message", handleWorkerMessage);
+				activeWorker.removeEventListener("message", handleWorkerMessage);
 				resolve({ resultText, resultTokens });
 			}
 		}
 
-		if (worker) {
-			worker.addEventListener("message", handleWorkerMessage);
-			worker.postMessage(text);
-		} else {
-			reject("Worker not initialized yet");
-		}
+		activeWorker.addEventListener("message", handleWorkerMessage);
+		activeWorker.postMessage(text);
 	});
 }
 

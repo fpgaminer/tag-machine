@@ -18,10 +18,8 @@ type WikiPages = Record<string, DTextTag[]>;
 
 let wikiPagesPromise: Promise<WikiPages> | null = null;
 
-async function loadWikiPages(): Promise<WikiPages> {
-	if (wikiPagesPromise === null) {
-		wikiPagesPromise = import("./parsed_tag_pages.json").then((module) => module.default as WikiPages);
-	}
+function loadWikiPages(): Promise<WikiPages> {
+	wikiPagesPromise ??= import("./parsed_tag_pages.json").then((module) => module.default as WikiPages);
 
 	return wikiPagesPromise;
 }

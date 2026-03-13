@@ -286,7 +286,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
 
 			if (normalizedDraftCategories.length > 0) {
-				prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories}`;
+				prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories.join(", ")}`;
 			}
 
 			for await (const response of doCustom(imageId, "questions", prompt)) {
@@ -545,43 +545,56 @@ function clearDraft(imageId: number) {
 
 export default observer(VQAEditor);
 
+function blobToDataURL(blob: Blob): Promise<string> {
+	return new Promise((resolve, reject) => {
+		const reader = new FileReader();
+
+		reader.onload = () => {
+			if (typeof reader.result === "string") {
+				resolve(reader.result);
+			} else {
+				reject(new Error("FileReader returned a non-string result"));
+			}
+		};
+
+		reader.onerror = () => {
+			reject(new Error("Failed to read blob as data URL"));
+		};
+
+		reader.readAsDataURL(blob);
+	});
+}
+
 async function getImageAsBase64(imageId: number): Promise<{ base64: string; mimeType: string }> {
 	const response = await authenticatedFetch(imageIdToUrl(imageId));
 	if (!response.ok) {
-		throw new Error(`Failed to fetch image: ${response.statusText}`);
+		throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
 	}
 
 	const mimeType = response.headers.get("Content-Type") ?? "image/jpeg";
 	const blob = await response.blob();
+	const dataUrl = await blobToDataURL(blob);
 
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => {
-			const base64data = reader.result?.toString().split(",")[1] ?? "";
-			resolve({ base64: base64data, mimeType });
-		};
-		reader.onerror = (err: ProgressEvent<FileReader>) => reject(new Error(`Failed to read image: ${err.type}`));
-		reader.readAsDataURL(blob);
-	});
+	const commaIndex = dataUrl.indexOf(",");
+	if (commaIndex === -1) {
+		throw new Error("Invalid data URL");
+	}
+
+	return {
+		base64: dataUrl.slice(commaIndex + 1),
+		mimeType,
+	};
 }
 
 async function getImageAsDataUrl(imageId: number): Promise<string> {
 	const response = await authenticatedFetch(imageIdToUrl(imageId));
 	if (!response.ok) {
-		throw new Error(`Failed to fetch image: ${response.statusText}`);
+		throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
 	}
 
 	const blob = await response.blob();
 
-	return new Promise((resolve, reject) => {
-		const reader = new FileReader();
-		reader.onloadend = () => {
-			const dataUrl = reader.result?.toString() ?? "";
-			resolve(dataUrl);
-		};
-		reader.onerror = (err: ProgressEvent<FileReader>) => reject(new Error(`Failed to read image: ${err.type}`));
-		reader.readAsDataURL(blob);
-	});
+	return await blobToDataURL(blob);
 }
 
 function asyncPrompt(message: string): Promise<string | null> {
@@ -683,9 +696,9 @@ async function* doCustom(
 	image_id: number,
 	model: string,
 	prompt: string,
-	port: number = 5048,
-	system_message: string = "You are a helpful image captioner.",
-	temperature: number = 1.0,
+	port = 5048,
+	system_message = "You are a helpful image captioner.",
+	temperature = 1.0,
 ): AsyncGenerator<string> {
 	const client = new OpenAI({
 		apiKey: "fungal",
@@ -727,7 +740,7 @@ async function* doCustom(
 		let response = "";
 
 		for await (const chunk of stream) {
-			const piece = chunk.choices[0]?.delta?.content || "";
+			const piece = chunk.choices[0]?.delta?.content ?? "";
 
 			response += piece;
 			yield response;
@@ -838,11 +851,11 @@ async function openAICompatRequest(
 	};
 
 	if (temperature !== undefined) {
-		body["temperature"] = temperature;
+		body.temperature = temperature;
 	}
 
 	if (top_p !== undefined) {
-		body["top_p"] = top_p;
+		body.top_p = top_p;
 	}
 
 	const response = await fetch(url, {

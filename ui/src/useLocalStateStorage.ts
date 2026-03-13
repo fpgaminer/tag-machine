@@ -14,7 +14,7 @@ interface Options<T> {
 function useLocalStorageState<T>(
 	key: string,
 	initialValue: T | (() => T),
-	options?: Options<T>,
+	options: Options<T> = {},
 ): [T, React.Dispatch<React.SetStateAction<T>>] {
 	const actualInitialValue = initialValue instanceof Function ? initialValue() : initialValue;
 	const isString = typeof actualInitialValue === "string";
@@ -25,7 +25,7 @@ function useLocalStorageState<T>(
 	const defaultDeserialize: (value: string) => T = isString
 		? (value) => value as unknown as T
 		: (value) => JSON.parse(value) as T;
-	const { sync = false, serialize = defaultSerialize, deserialize = defaultDeserialize, debounce = 0 } = options || {};
+	const { sync = false, serialize = defaultSerialize, deserialize = defaultDeserialize, debounce = 0 } = options;
 
 	// Keep track of the previous key to handle key changes
 	const prevKeyRef = useRef(key);
@@ -92,11 +92,12 @@ function useLocalStorageState<T>(
 		const handleStorageChange = (e: StorageEvent) => {
 			if (e.key === key) {
 				try {
-					const newValue = e.newValue
-						? deserialize(e.newValue)
-						: initialValue instanceof Function
-							? initialValue()
-							: initialValue;
+					const newValue =
+						e.newValue !== null
+							? deserialize(e.newValue)
+							: initialValue instanceof Function
+								? initialValue()
+								: initialValue;
 					setState(newValue);
 				} catch (error) {
 					console.error(`Error deserializing localStorage key "${key}":`, error);

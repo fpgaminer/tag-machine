@@ -98,7 +98,7 @@ function ImageDisplay({
 				maxScale={16}
 			>
 				{(utils) => {
-					const { positionX, positionY, scale } = utils.instance.transformState;
+					const { scale } = utils.instance.transformState;
 					const contentComponentRect = utils.instance.contentComponent?.getBoundingClientRect();
 
 					return (
@@ -110,8 +110,6 @@ function ImageDisplay({
 									scale={scale}
 									imgSize={imgSize}
 									parentSize={contentComponentRect}
-									positionX={positionX}
-									positionY={positionY}
 								/>
 							) : null}
 							{enableBoundingBoxes && boundingBoxes && onBoundingBoxChange && imgSize && contentComponentRect
@@ -176,15 +174,11 @@ function BoundingBoxAdder({
 	scale,
 	imgSize,
 	parentSize,
-	positionX,
-	positionY,
 }: {
 	onBoundingBoxAdd: (boundingBox: BoundingBox) => void;
 	scale: number;
 	imgSize: { width: number; height: number };
 	parentSize: { width: number; height: number };
-	positionX: number;
-	positionY: number;
 }) {
 	const [newBoundingBox, setNewBoundingBox] = useState<BoundingBox | null>(null);
 

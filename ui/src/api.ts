@@ -11,8 +11,8 @@ export interface ApiTag {
 export interface ApiImage {
 	id: number;
 	hash: string;
-	tags: { [key: number]: number };
-	attributes: { [key: string]: { [key: string]: number } };
+	tags: Record<number, number>;
+	attributes: Record<string, Record<string, number>>;
 	active: boolean;
 	caption: string;
 }
@@ -74,9 +74,7 @@ export async function authenticatedFetch(input: RequestInfo | URL, init?: Reques
 		throw new Error("User token is null");
 	}
 
-	if (init === undefined) {
-		init = {};
-	}
+	init ??= {};
 
 	if (init.headers === undefined) {
 		init.headers = new Headers();
