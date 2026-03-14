@@ -70,7 +70,7 @@ function areCategoriesEqual(left: string[], right: string[]): boolean {
 	return leftSorted.every((category, index) => category === rightSorted[index]);
 }
 
-type SuggestionMenu = "question" | "answer" | null;
+type SuggestionMenu = "question" | "answer" | "settings" | null;
 
 function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const imageId = currentImage.id;
@@ -115,6 +115,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const questionFieldRef = useRef<HTMLDivElement>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const answerFieldRef = useRef<HTMLDivElement>(null);
+	const settingsMenuRef = useRef<HTMLDivElement>(null);
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
 	const [activeSuggestionMenu, setActiveSuggestionMenu] = useState<SuggestionMenu>(null);
@@ -183,7 +184,11 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				return;
 			}
 
-			if (questionFieldRef.current?.contains(target) || answerFieldRef.current?.contains(target)) {
+			if (
+				questionFieldRef.current?.contains(target) ||
+				answerFieldRef.current?.contains(target) ||
+				settingsMenuRef.current?.contains(target)
+			) {
 				return;
 			}
 
@@ -396,9 +401,6 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			<div className="contentBased columnHeader">
 				<h3>Visual Q & A</h3>
 				<div className="columnHeaderButtons">
-					<button onClick={onAISettingsClicked} title="Open AI Settings">
-						AI Settings
-					</button>
 					<button
 						onClick={onRevert}
 						disabled={!isUnsaved}
@@ -407,6 +409,25 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						Revert
 					</button>
 					<SaveButton isUnsaved={isUnsaved} onSave={handleSave} />
+					<div className="vqa-header-menu-container" ref={settingsMenuRef}>
+						<button type="button" onClick={() => toggleSuggestionMenu("settings")} title="Open VQA settings">
+							<Icon icon="fluent:settings-24-regular" />
+						</button>
+						{activeSuggestionMenu === "settings" && (
+							<div className="vqa-header-menu">
+								<button
+									type="button"
+									className="vqa-header-menu-item"
+									onClick={() => {
+										setActiveSuggestionMenu(null);
+										onAISettingsClicked();
+									}}
+								>
+									AI Settings
+								</button>
+							</div>
+						)}
+					</div>
 				</div>
 			</div>
 			{suggestedPrompts && (
