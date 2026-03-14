@@ -29,6 +29,20 @@ interface LocalDraft {
 	categoriesInput: string;
 }
 
+interface VQATemplateSettings {
+	enabled: boolean;
+	template: LocalDraft | null;
+}
+
+const EMPTY_DRAFT_SOURCE = {
+	question: "",
+	answer: "",
+	categories: [] as string[],
+};
+
+const VQA_TEMPLATE_STORAGE_KEY = "vqa-template-settings";
+const VQA_DRAFT_DEBOUNCE_MS = 300;
+
 function buildDraft(
 	source: Partial<LocalDraft> | null | undefined,
 	fallbacks: { question: string; answer: string; categories: string[] },
@@ -70,6 +84,53 @@ function areCategoriesEqual(left: string[], right: string[]): boolean {
 	return leftSorted.every((category, index) => category === rightSorted[index]);
 }
 
+function toLocalDraft(source: { question: string; answer: string; categories: string[] }): LocalDraft {
+	return {
+		question: source.question,
+		answer: source.answer,
+		categories: source.categories,
+		categoriesInput: source.categories.join(","),
+	};
+}
+
+function isDraftBlank(source: { question: string; answer: string; categories: string[] }): boolean {
+	return (
+		source.question.trim() === "" && source.answer.trim() === "" && normalizeCategories(source.categories).length === 0
+	);
+}
+
+function getDraftStorageKey(imageId: number): string {
+	return `vqa-drafts-${imageId}`;
+}
+
+function readStoredDraft(
+	imageId: number,
+	serverDraft: { question: string; answer: string; categories: string[] },
+): LocalDraft | null {
+	const storedDraft = localStorage.getItem(getDraftStorageKey(imageId));
+	if (storedDraft === null) {
+		return null;
+	}
+
+	try {
+		return buildDraft(JSON.parse(storedDraft) as Partial<LocalDraft>, serverDraft);
+	} catch (error) {
+		console.error(`Error reading VQA draft for image ${imageId}:`, error);
+		return null;
+	}
+}
+
+function writeStoredDraft(imageId: number, draft: LocalDraft): void {
+	localStorage.setItem(getDraftStorageKey(imageId), JSON.stringify(draft));
+}
+
+function normalizeTemplateSettings(source: Partial<VQATemplateSettings> | null | undefined): VQATemplateSettings {
+	return {
+		enabled: Boolean(source?.enabled),
+		template: source?.template ? buildDraft(source.template, EMPTY_DRAFT_SOURCE) : null,
+	};
+}
+
 type SuggestionMenu = "question" | "answer" | "settings" | null;
 
 function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
@@ -93,15 +154,17 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	);
 
 	/** ───────────────────────────── Draft state persisted per image ─────────────────────── */
-	const [draft, setDraft] = useLocalStorageState<LocalDraft>(
-		`vqa-drafts-${imageId}`,
-		() => ({ ...serverDraft, categoriesInput: serverDraft.categories.join(",") }),
+	const [templateSettings, setTemplateSettings] = useLocalStorageState<VQATemplateSettings>(
+		VQA_TEMPLATE_STORAGE_KEY,
+		{ enabled: false, template: null },
 		{
 			sync: true,
-			debounce: 300,
-			deserialize: (value) => buildDraft(JSON.parse(value) as Partial<LocalDraft>, serverDraft),
+			deserialize: (value) => normalizeTemplateSettings(JSON.parse(value) as Partial<VQATemplateSettings>),
 		},
 	);
+	const [draft, setDraft] = useState<LocalDraft>(() => toLocalDraft(serverDraft));
+	const [shouldPersistDraft, setShouldPersistDraft] = useState(false);
+	const [isTemplatePreviewActive, setIsTemplatePreviewActive] = useState(false);
 	const normalizedDraftCategories = useMemo(() => normalizeCategories(draft.categories), [draft.categories]);
 
 	const wordCount = useMemo(() => draft.answer.trim().split(/\s+/).filter(Boolean).length, [draft.answer]);
@@ -110,6 +173,9 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		draft.question !== parsedQA?.question ||
 		draft.answer !== parsedQA?.answer ||
 		!areCategoriesEqual(normalizedDraftCategories, imageCategories);
+	const hasTemplateCategoryText = isTemplatePreviewActive && draft.categoriesInput.trim() !== "";
+	const hasTemplateQuestionText = isTemplatePreviewActive && draft.question.trim() !== "";
+	const hasTemplateAnswerText = isTemplatePreviewActive && draft.answer.trim() !== "";
 
 	// ─────────────────── UI state / refs ───────────────────
 	const questionFieldRef = useRef<HTMLDivElement>(null);
@@ -158,10 +224,48 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			}
 			await Promise.all(ops);
 			clearDraft(imageId);
+			setShouldPersistDraft(false);
+			setIsTemplatePreviewActive(false);
 		} catch (err) {
 			errorMessageState.setErrorMessage(`Failed to save VQA data: ${String(err)}`);
 		}
 	}, [imageId, draft, parsedQA, imageCategories, normalizedDraftCategories]);
+
+	useEffect(() => {
+		const storedDraft = readStoredDraft(imageId, serverDraft);
+
+		if (storedDraft !== null) {
+			setDraft(storedDraft);
+			setShouldPersistDraft(true);
+			setIsTemplatePreviewActive(false);
+		} else if (templateSettings.enabled && templateSettings.template !== null && isDraftBlank(serverDraft)) {
+			setDraft(buildDraft(templateSettings.template, serverDraft));
+			setShouldPersistDraft(false);
+			setIsTemplatePreviewActive(true);
+		} else {
+			setDraft(toLocalDraft(serverDraft));
+			setShouldPersistDraft(false);
+			setIsTemplatePreviewActive(false);
+		}
+
+		setSuggestedPrompts(null);
+		setSuggestedAnswers(null);
+		setActiveSuggestionMenu(null);
+	}, [imageId]);
+
+	useEffect(() => {
+		if (!shouldPersistDraft) {
+			return;
+		}
+
+		const timeout = window.setTimeout(() => {
+			writeStoredDraft(imageId, draft);
+		}, VQA_DRAFT_DEBOUNCE_MS);
+
+		return () => {
+			window.clearTimeout(timeout);
+		};
+	}, [draft, imageId, shouldPersistDraft]);
 
 	// ─────────────────── Hot‑key (Ctrl/Cmd+S) ───────────────────
 	useEffect(() => {
@@ -203,24 +307,27 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 	const onRevert = () => {
 		clearDraft(imageId);
-		setDraft({
-			question: parsedQA?.question ?? "",
-			answer: parsedQA?.answer ?? "",
-			categories: imageCategories,
-			categoriesInput: imageCategories.join(","),
-		});
+		setShouldPersistDraft(false);
+		setIsTemplatePreviewActive(false);
+		setDraft(toLocalDraft(serverDraft));
 	};
+
+	function updateDraft(nextDraft: React.SetStateAction<LocalDraft>) {
+		setShouldPersistDraft(true);
+		setIsTemplatePreviewActive(false);
+		setDraft(nextDraft);
+	}
 
 	// ─────────────────── Text change handlers ───────────────────
 	const onQuestionChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		setDraft((prev) => ({ ...prev, question: e.target.value }));
+		updateDraft((prev) => ({ ...prev, question: e.target.value }));
 	};
 	const onAnswerChange = (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-		setDraft((prev) => ({ ...prev, answer: e.target.value }));
+		updateDraft((prev) => ({ ...prev, answer: e.target.value }));
 	};
 	const onCategoryChange = (e: React.ChangeEvent<HTMLInputElement>) => {
 		const categoriesInput = e.target.value;
-		setDraft((prev) => ({
+		updateDraft((prev) => ({
 			...prev,
 			categories: parseCategoriesInput(categoriesInput),
 			categoriesInput,
@@ -299,7 +406,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 					return;
 				}
 
-				setDraft((prev) => ({ ...prev, question: response }));
+				updateDraft((prev) => ({ ...prev, question: response }));
 			}
 		} finally {
 			setIsCustomLoading(false);
@@ -325,7 +432,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 					return;
 				}
 
-				setDraft((prev) => ({ ...prev, answer: response }));
+				updateDraft((prev) => ({ ...prev, answer: response }));
 			}
 		} finally {
 			setIsCustom2Loading(false);
@@ -333,13 +440,13 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	}
 
 	function onPromptSelected(prompt: string) {
-		setDraft((prev) => ({ ...prev, question: prompt }));
+		updateDraft((prev) => ({ ...prev, question: prompt }));
 		setSuggestedPrompts(null);
 		answerTextareaRef.current?.focus();
 	}
 
 	function onAnswerSelected(answer: string) {
-		setDraft((prev) => ({ ...prev, answer: answer }));
+		updateDraft((prev) => ({ ...prev, answer: answer }));
 		setSuggestedAnswers(null);
 	}
 
@@ -359,6 +466,38 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 	function onAISettingsClicked() {
 		popupsState.addPopup(PopupStates.VqaAiSettings);
+	}
+
+	function onRecordTemplateClicked() {
+		setTemplateSettings((prev) => ({
+			...prev,
+			template: buildDraft(draft, EMPTY_DRAFT_SOURCE),
+		}));
+	}
+
+	function onToggleTemplateClicked() {
+		setTemplateSettings((prev) => ({
+			...prev,
+			enabled: !prev.enabled,
+		}));
+
+		if (!templateSettings.enabled) {
+			if (
+				templateSettings.template !== null &&
+				!shouldPersistDraft &&
+				!isTemplatePreviewActive &&
+				isDraftBlank(serverDraft) &&
+				isDraftBlank(draft)
+			) {
+				setDraft(buildDraft(templateSettings.template, serverDraft));
+				setShouldPersistDraft(false);
+				setIsTemplatePreviewActive(true);
+			}
+		} else if (isTemplatePreviewActive) {
+			setDraft(toLocalDraft(serverDraft));
+			setShouldPersistDraft(false);
+			setIsTemplatePreviewActive(false);
+		}
 	}
 
 	async function onSuggestCategoryClicked() {
@@ -382,7 +521,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			0.9,
 		);
 
-		setDraft((prev) => ({
+		updateDraft((prev) => ({
 			...prev,
 			categories: parseCategoriesInput(response),
 			categoriesInput: response,
@@ -415,6 +554,26 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 						</button>
 						{activeSuggestionMenu === "settings" && (
 							<div className="vqa-header-menu">
+								<button
+									type="button"
+									className="vqa-header-menu-item"
+									onClick={() => {
+										setActiveSuggestionMenu(null);
+										onRecordTemplateClicked();
+									}}
+								>
+									Record Template
+								</button>
+								<button
+									type="button"
+									className="vqa-header-menu-item"
+									onClick={() => {
+										setActiveSuggestionMenu(null);
+										onToggleTemplateClicked();
+									}}
+								>
+									{templateSettings.enabled ? "Disable Template" : "Enable Template"}
+								</button>
 								<button
 									type="button"
 									className="vqa-header-menu-item"
@@ -457,6 +616,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			<div className="remainingSpace vqaEditor">
 				<div className="category-input-container">
 					<input
+						className={hasTemplateCategoryText ? "vqa-template-preview" : undefined}
 						placeholder="Enter the categories"
 						value={draft.categoriesInput}
 						onChange={onCategoryChange}
@@ -475,6 +635,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				</div>
 				<div className="vqa-textarea-field" ref={questionFieldRef}>
 					<textarea
+						className={hasTemplateQuestionText ? "vqa-template-preview" : undefined}
 						placeholder="Enter your question"
 						value={draft.question}
 						onChange={onQuestionChange}
@@ -515,6 +676,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				</div>
 				<div className="vqa-textarea-field" ref={answerFieldRef}>
 					<textarea
+						className={hasTemplateAnswerText ? "vqa-template-preview" : undefined}
 						ref={answerTextareaRef}
 						placeholder="Enter the answer"
 						value={draft.answer}
@@ -561,7 +723,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 }
 
 function clearDraft(imageId: number) {
-	localStorage.removeItem(`vqa-drafts-${imageId}`);
+	localStorage.removeItem(getDraftStorageKey(imageId));
 }
 
 export default observer(VQAEditor);

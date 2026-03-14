@@ -825,6 +825,12 @@ li p {
 	color: #f0f0f0;
 }
 
+.vqaEditor .vqa-template-preview {
+	background-color: #3a3119;
+	color: #ffd676;
+	box-shadow: inset 0 0 0 1px #9f7d2f;
+}
+
 .vqaEditor .word-count-overlay {
 	position: absolute;
 	background-color: rgba(0, 0, 0, 0.2);
