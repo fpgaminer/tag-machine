@@ -4,6 +4,7 @@ import { ReactZoomPanPinchRef, TransformComponent, TransformWrapper } from "reac
 import React, { useEffect, useRef, useState } from "react";
 import { authState } from "./state/Auth";
 import { currentImageState } from "./state/CurrentImage";
+import * as api from "./api";
 
 // Inclusive bounding box.
 // The smallest box is when left == right (or top == bottom), which is a width/height of 1.
@@ -15,6 +16,7 @@ export interface BoundingBox {
 	label: string;
 }
 
+// imageId and resolution must _not_ change. Instead key the component with imageId and resolution so the entire component is recreated when they change.
 function ImageDisplay({
 	imageId,
 	resolution,
@@ -31,51 +33,80 @@ function ImageDisplay({
 	onBoundingBoxChange?: (boundingBoxes: BoundingBox[]) => void;
 }) {
 	const [imageData, setImageData] = useState<string | null>(null);
-	const userToken = authState.user_token;
 	const [imgSize, setImgSize] = useState<{ width: number; height: number } | null>(null);
+	const [isLoading, setIsLoading] = useState(false);
+	const userLoggedIn = authState.user_token !== null;
 	const transformRef = useRef<ReactZoomPanPinchRef>(null);
-	const containerRef = useRef<HTMLDivElement>(null);
-	const imageRef = useRef<HTMLImageElement>(null);
+
+	useEffect(() => {
+		if (!userLoggedIn || imageId === null) {
+			currentImageState.displayedImageId = null;
+			return;
+		}
+
+		const controller = new AbortController();
+		let objectUrl: string | null = null;
+
+		currentImageState.displayedImageId = imageId;
+		setIsLoading(true);
+
+		async function run(imageId: number) {
+			try {
+				let url = imageIdToUrl(imageId);
+				if (resolution !== null) {
+					url += `?size=${resolution}`;
+				}
+
+				const response = await api.authenticatedFetch(url, { method: "GET", signal: controller.signal });
+
+				if (!response.ok) {
+					throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
+				}
+
+				const blob = await response.blob();
+				objectUrl = URL.createObjectURL(blob);
+
+				if (controller.signal.aborted) {
+					URL.revokeObjectURL(objectUrl);
+					objectUrl = null;
+					return;
+				}
+
+				setImageData(objectUrl);
+			} catch (error) {
+				if (controller.signal.aborted) {
+					return;
+				}
+
+				errorMessageState.setErrorMessage(
+					`Error fetching image: ${error instanceof Error ? error.message : String(error)}`,
+				);
+			} finally {
+				if (!controller.signal.aborted) {
+					setIsLoading(false);
+				}
+			}
+		}
+
+		void run(imageId);
+
+		return () => {
+			controller.abort();
+
+			if (objectUrl !== null) {
+				URL.revokeObjectURL(objectUrl);
+			}
+
+			currentImageState.displayedImageId = null;
+		};
+	}, []);
 
 	const handleImageLoad = (e: React.SyntheticEvent<HTMLImageElement>) => {
 		const { naturalWidth, naturalHeight } = e.currentTarget;
 		setImgSize({ width: naturalWidth, height: naturalHeight });
 		transformRef.current?.resetTransform();
-	};
-
-	useEffect(() => {
-		if (userToken !== null && imageId !== null) {
-			let url = imageIdToUrl(imageId);
-
-			if (resolution !== null) {
-				url += `?size=${resolution}`;
-			}
-
-			fetch(url, {
-				method: "GET",
-				headers: {
-					Authorization: `Bearer ${userToken}`,
-				},
-			})
-				.then((response) => {
-					if (!response.ok) {
-						throw new Error(`Failed to fetch image: ${response.statusText}`);
-					}
-
-					return response.blob();
-				})
-				.then((blob) => {
-					setImageData(URL.createObjectURL(blob));
-				})
-				.catch((error) => {
-					errorMessageState.setErrorMessage(`Error fetching image: ${error}`);
-				});
-		} else {
-			setImageData(null);
-		}
-
 		currentImageState.displayedImageId = imageId;
-	}, [imageId, userToken, resolution]);
+	};
 
 	const handleBoundingBoxAdd = (boundingBox: BoundingBox) => {
 		if (!onBoundingBoxChange || !imgSize) {
@@ -85,7 +116,7 @@ function ImageDisplay({
 		onBoundingBoxChange(clampBoundingBoxes([...(boundingBoxes ?? []), boundingBox], imgSize));
 	};
 
-	let contents = <p>Loading...</p>;
+	let contents: React.ReactNode = null;
 
 	if (imageData !== null) {
 		contents = (
@@ -103,7 +134,7 @@ function ImageDisplay({
 
 					return (
 						<TransformComponent>
-							<img src={imageData} onLoad={handleImageLoad} ref={imageRef} />
+							<img src={imageData} onLoad={handleImageLoad} alt="" />
 							{enableBoundingBoxes && onBoundingBoxChange && imgSize && contentComponentRect ? (
 								<BoundingBoxAdder
 									onBoundingBoxAdd={handleBoundingBoxAdd}
@@ -141,15 +172,13 @@ function ImageDisplay({
 				}}
 			</TransformWrapper>
 		);
+	} else if (isLoading) {
+		contents = <p>Loading...</p>;
 	} else if (message !== null) {
 		contents = <p>{message}</p>;
 	}
 
-	return (
-		<div className="image-display" ref={containerRef}>
-			{contents}
-		</div>
-	);
+	return <div className="image-display">{contents}</div>;
 }
 
 export default observer(ImageDisplay);
@@ -183,22 +212,16 @@ function BoundingBoxAdder({
 	const [newBoundingBox, setNewBoundingBox] = useState<BoundingBox | null>(null);
 
 	// Determine how much the image is scaled (it's object-fit: contain)
-	const parentWidth = parentSize.width / scale;
-	const parentHeight = parentSize.height / scale;
-	const imageScale = Math.min(parentWidth / imgSize.width, parentHeight / imgSize.height);
-
-	// The image is always centered in the parent container, so we can calculate the position of the image in screen coordinates
-	const imageX = (parentWidth - imgSize.width * imageScale) / 2;
-	const imageY = (parentHeight - imgSize.height * imageScale) / 2;
+	const geometry = getImageGeometry(scale, imgSize, parentSize);
 
 	// Now we can convert the bounding box from image coordinates to screen coordinates
 	let bbDiv = null;
 
 	if (newBoundingBox !== null) {
-		const bbScreenX = imageX + newBoundingBox.left * imageScale;
-		const bbScreenY = imageY + newBoundingBox.top * imageScale;
-		const bbScreenWidth = (newBoundingBox.right - newBoundingBox.left + 1) * imageScale;
-		const bbScreenHeight = (newBoundingBox.bottom - newBoundingBox.top + 1) * imageScale;
+		const bbScreenX = geometry.imageX + newBoundingBox.left * geometry.imageScale;
+		const bbScreenY = geometry.imageY + newBoundingBox.top * geometry.imageScale;
+		const bbScreenWidth = (newBoundingBox.right - newBoundingBox.left + 1) * geometry.imageScale;
+		const bbScreenHeight = (newBoundingBox.bottom - newBoundingBox.top + 1) * geometry.imageScale;
 
 		const boxStyle: React.CSSProperties = {
 			left: bbScreenX,
@@ -223,18 +246,10 @@ function BoundingBoxAdder({
 		event.preventDefault();
 
 		// Convert the click position to image coordinates
-		const rect = event.currentTarget.getBoundingClientRect();
-		const rectImageScale = Math.min(rect.width / imgSize.width, rect.height / imgSize.height);
-		const rectImageX = (rect.width - imgSize.width * rectImageScale) / 2;
-		const rectImageY = (rect.height - imgSize.height * rectImageScale) / 2;
-		const x = (event.clientX - rect.left - rectImageX) / rectImageScale;
-		const y = (event.clientY - rect.top - rectImageY) / rectImageScale;
-		const clampedX = Math.min(Math.max(x, 0), imgSize.width - 1);
-		const clampedY = Math.min(Math.max(y, 0), imgSize.height - 1);
-		//console.log("clientX", event.clientX, "clientY", event.clientY, "rect", rect, "rectImageScale", rectImageScale, "rectImageX", rectImageX, "rectImageY", rectImageY, "x", x, "y", y);
+		const { x, y } = clientPointToImagePoint(event.clientX, event.clientY, event.currentTarget, imgSize);
 
 		if (newBoundingBox === null) {
-			setNewBoundingBox({ left: clampedX, top: clampedY, right: clampedX, bottom: clampedY, label: "watermark" });
+			setNewBoundingBox({ left: x, top: y, right: x, bottom: y, label: "watermark" });
 		} else {
 			onBoundingBoxAdd(newBoundingBox);
 			setNewBoundingBox(null);
@@ -247,20 +262,13 @@ function BoundingBoxAdder({
 		}
 
 		// Convert the mouse position to image coordinates
-		const rect = event.currentTarget.getBoundingClientRect();
-		const rectImageScale = Math.min(rect.width / imgSize.width, rect.height / imgSize.height);
-		const rectImageX = (rect.width - imgSize.width * rectImageScale) / 2;
-		const rectImageY = (rect.height - imgSize.height * rectImageScale) / 2;
-		const x = (event.clientX - rect.left - rectImageX) / rectImageScale;
-		const y = (event.clientY - rect.top - rectImageY) / rectImageScale;
-		const clampedX = Math.min(Math.max(x, 0), imgSize.width - 1);
-		const clampedY = Math.min(Math.max(y, 0), imgSize.height - 1);
+		const { x, y } = clientPointToImagePoint(event.clientX, event.clientY, event.currentTarget, imgSize);
 
 		setNewBoundingBox({
 			left: newBoundingBox.left,
 			top: newBoundingBox.top,
-			right: Math.max(clampedX, newBoundingBox.left),
-			bottom: Math.max(clampedY, newBoundingBox.top),
+			right: Math.max(x, newBoundingBox.left),
+			bottom: Math.max(y, newBoundingBox.top),
 			label: newBoundingBox.label,
 		});
 	};
@@ -301,19 +309,13 @@ function BoundingBoxOverlay({
 	} | null>(null);
 
 	// Determine how much the image is scaled (it's object-fit: contain)
-	const parentWidth = parentSize.width / scale;
-	const parentHeight = parentSize.height / scale;
-	const imageScale = Math.min(parentWidth / imgSize.width, parentHeight / imgSize.height);
-
-	// The image is always centered in the parent container, so we can calculate the position of the image in screen coordinates
-	const imageX = (parentWidth - imgSize.width * imageScale) / 2;
-	const imageY = (parentHeight - imgSize.height * imageScale) / 2;
+	const geometry = getImageGeometry(scale, imgSize, parentSize);
 
 	// Now we can convert the bounding box from image coordinates to screen coordinates
-	const screenX = imageX + boundingBox.left * imageScale;
-	const screenY = imageY + boundingBox.top * imageScale;
-	const screenWidth = (boundingBox.right - boundingBox.left + 1) * imageScale;
-	const screenHeight = (boundingBox.bottom - boundingBox.top + 1) * imageScale;
+	const screenX = geometry.imageX + boundingBox.left * geometry.imageScale;
+	const screenY = geometry.imageY + boundingBox.top * geometry.imageScale;
+	const screenWidth = (boundingBox.right - boundingBox.left + 1) * geometry.imageScale;
+	const screenHeight = (boundingBox.bottom - boundingBox.top + 1) * geometry.imageScale;
 
 	const boxStyle: React.CSSProperties = {
 		left: screenX,
@@ -351,8 +353,8 @@ function BoundingBoxOverlay({
 		event.preventDefault();
 
 		// Calculate how far the mouse has moved in image coordinates
-		const diffX = (event.clientX - dragging.clientX) / imageScale / scale;
-		const diffY = (event.clientY - dragging.clientY) / imageScale / scale;
+		const diffX = (event.clientX - dragging.clientX) / geometry.imageScale / scale;
+		const diffY = (event.clientY - dragging.clientY) / geometry.imageScale / scale;
 		const originalBB = dragging.originalBoundingBox;
 
 		if (dragging.editBottom && dragging.editRight && dragging.editLeft && dragging.editTop) {
@@ -391,13 +393,18 @@ function BoundingBoxOverlay({
 	};
 
 	useEffect(() => {
+		if (dragging === null) {
+			return;
+		}
+
 		window.addEventListener("mousemove", handleMouseMove);
 		window.addEventListener("mouseup", handleMouseUp);
+
 		return () => {
 			window.removeEventListener("mousemove", handleMouseMove);
 			window.removeEventListener("mouseup", handleMouseUp);
 		};
-	});
+	}, [dragging]);
 
 	const handleDelete = () => {
 		console.log("delete");
@@ -507,4 +514,57 @@ function BoundingBoxOverlay({
 			/>
 		</div>
 	);
+}
+
+interface Size {
+	width: number;
+	height: number;
+}
+
+interface ImageGeometry {
+	parentWidth: number;
+	parentHeight: number;
+	imageScale: number;
+	imageX: number;
+	imageY: number;
+}
+
+function getImageGeometry(scale: number, imgSize: Size, parentSize: Size): ImageGeometry {
+	const parentWidth = parentSize.width / scale;
+	const parentHeight = parentSize.height / scale;
+	const imageScale = Math.min(parentWidth / imgSize.width, parentHeight / imgSize.height);
+	const imageX = (parentWidth - imgSize.width * imageScale) / 2;
+	const imageY = (parentHeight - imgSize.height * imageScale) / 2;
+
+	return {
+		parentWidth,
+		parentHeight,
+		imageScale,
+		imageX,
+		imageY,
+	};
+}
+
+function clamp(value: number, min: number, max: number): number {
+	return Math.min(Math.max(value, min), max);
+}
+
+function clientPointToImagePoint(
+	clientX: number,
+	clientY: number,
+	element: Element,
+	imgSize: Size,
+): { x: number; y: number } {
+	const rect = element.getBoundingClientRect();
+	const imageScale = Math.min(rect.width / imgSize.width, rect.height / imgSize.height);
+	const imageX = (rect.width - imgSize.width * imageScale) / 2;
+	const imageY = (rect.height - imgSize.height * imageScale) / 2;
+
+	const x = (clientX - rect.left - imageX) / imageScale;
+	const y = (clientY - rect.top - imageY) / imageScale;
+
+	return {
+		x: clamp(x, 0, imgSize.width - 1),
+		y: clamp(y, 0, imgSize.height - 1),
+	};
 }

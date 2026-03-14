@@ -105,6 +105,7 @@ function BoundingBoxMode() {
 			<div className="column remainingSpace spacing-5">
 				<div className="row remainingSpace">
 					<ImageDisplay
+						key={`${currentImage?.id ?? "none"}:${imageResolutionState.resolution ?? "original"}`}
 						imageId={currentImage !== null ? currentImage.id : null}
 						resolution={imageResolutionState.resolution}
 						message={message}

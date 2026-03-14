@@ -452,6 +452,7 @@ autorun(() => {
 	const searchList = imageListState.searchList;
 	const currentImageIndex = currentImageState.searchIndex;
 	const user_token = authState.user_token;
+	const resolution = imageResolutionState.resolution;
 
 	if (searchList === null || currentImageIndex === null) {
 		return;
@@ -469,11 +470,12 @@ autorun(() => {
 		const image = imageListState.getImageByIndexClamped(i);
 
 		if (image !== null && user_token !== null) {
-			void fetch(imageHashToUrl(image.hash), {
-				headers: {
-					Authorization: `Bearer ${user_token}`,
-				},
-			}).then((response) => response.blob());
+			let url = imageIdToUrl(image.id);
+			if (resolution !== null) {
+				url += `?size=${resolution}`;
+			}
+
+			void api.authenticatedFetch(url, { method: "GET" }).then((response) => response.blob());
 		}
 	}
 });
