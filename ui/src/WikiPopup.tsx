@@ -73,7 +73,7 @@ export const WikiPopup = observer(function WikiPopupComponent() {
 
 	return (
 		<Popup onClose={() => popupsState.removePopup(PopupStates.Wiki)} title={tag.name} className="wiki-popup">
-			<div className="wiki-popup-body-content">
+			<div className="popup-window-body-content">
 				{tagDText !== undefined ? <DTextDisplay dtext={tagDText} /> : <p>Loading wiki...</p>}
 				<PostPreviews posts={previewData ?? []} />
 			</div>

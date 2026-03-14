@@ -237,7 +237,7 @@ function UploadPopup() {
 			onDragOver={onDragOver}
 			onDrop={onDrop}
 		>
-			<div className="upload-popup-body-content">
+			<div className="popup-window-body-content">
 				<div className="upload-popup-body-content-dropzone" onClick={handleDropzoneClick}>
 					{selectedFiles.length > 0 ? (
 						<button

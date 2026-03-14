@@ -131,7 +131,7 @@ export const ImageInfoPopup = observer(function ImageInfoPopupComponent() {
 			title={image.hash}
 			className="image-info-popup"
 		>
-			<div className="image-info-popup-body-content">
+			<div className="popup-window-body-content">
 				<div className="image-info-attributes">
 					<div className="image-info-attribute">
 						<div className="image-info-attribute-name">Image ID</div>

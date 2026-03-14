@@ -84,7 +84,7 @@ function VQAAIConfigPopup() {
 		<Popup
 			onClose={() => popupsState.removePopup(PopupStates.VqaAiSettings)}
 			title="VQA AI Settings"
-			className="user-popup-window"
+			className="vqa-ai-config-popup"
 		>
 			<div className="popup-window-body-content">
 				OpenRouter API Key: {openrouter_api_key_is_set ? "Set" : "Not Set"}
