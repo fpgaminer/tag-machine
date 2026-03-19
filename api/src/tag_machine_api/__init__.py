@@ -11,9 +11,10 @@ from PIL import Image
 import time
 from numpy.typing import NDArray
 from tag_machine_api.parse import parse_search_response_images
+import os
 
 
-API_URL = 'http://localhost:1420'
+DEFAULT_API_URL = 'http://localhost:1420'
 TAG_MACHINE_DEST_DIR = Path("/home/night/tag-machine/rust-api/images").absolute()
 
 
@@ -52,9 +53,15 @@ class DBLog(BaseModel):
 
 
 class TagMachineAPI:
-	def __init__(self, token: bytes | str, url: str = API_URL):
+	def __init__(self, token: bytes | str | None = None, url: str | None = None):
 		if isinstance(token, bytes):
 			token = token.hex()
+		
+		token = token or os.environ.get('TAG_MACHINE_TOKEN')
+		if token is None:
+			raise ValueError('Token must be provided either as an argument or in the TAG_MACHINE_TOKEN environment variable')
+		
+		url = url or os.environ.get('TAG_MACHINE_URL') or DEFAULT_API_URL
 
 		self.session = requests.Session()
 		self.url = url

@@ -1306,8 +1306,45 @@ li p {
 	background-color: #3498db;
 }
 
+.control-button:disabled {
+	background-color: #4d6474;
+	cursor: default;
+	opacity: 0.7;
+}
+
+.control-button:disabled:hover {
+	background-color: #4d6474;
+}
+
 .control-button:active {
 	transform: scale(0.98);
+}
+
+.control-button:disabled:active {
+	transform: none;
+}
+
+.task-nav-button {
+	margin-left: 10px;
+	background-color: transparent;
+	color: #d0d0d0;
+	padding: 0;
+}
+
+.task-nav-button:hover {
+	background-color: transparent;
+	color: #ffffff;
+}
+
+.task-nav-button:disabled,
+.task-nav-button:disabled:hover {
+	background-color: transparent;
+	color: #6f7c86;
+	opacity: 1;
+}
+
+.task-finish-control {
+	margin-left: 16px;
 }
 
 .task-progress-bar {

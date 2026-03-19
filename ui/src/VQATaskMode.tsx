@@ -3,28 +3,17 @@ import ActiveTagList from "./ActiveTagList";
 import ImageDisplay from "./ImageDisplay";
 import VQAEditor from "./VQAEditor";
 import { useEffect, useRef, useState } from "react";
-import * as api from "./api";
 import TaskControls from "./TaskControls";
 import { imageListState } from "./state/ImageList";
 import { imageResolutionState } from "./state";
-
-interface TaskData {
-	image_id: number;
-	noun_phrase: string;
-}
-
-interface CurrentTask {
-	task: api.ApiTask;
-	data: TaskData;
-}
+import { vqaTaskQueueState } from "./state/VQATaskQueue";
 
 function VQATaskMode() {
 	const initialHeight = parseFloat(localStorage.getItem("layout-vqamode-height") ?? "50");
 	const [activeTagListHeight, setActiveTagListHeight] = useState(initialHeight);
 	const isResizing = useRef(false);
-	const [taskCounts, setTaskCounts] = useState<Record<string, number>>({});
-	const [currentTask, setCurrentTask] = useState<CurrentTask | null>(null);
-	const currentImage = currentTask !== null ? imageListState.getImageById(currentTask.data.image_id) : null;
+	const currentImageId = vqaTaskQueueState.currentImageId;
+	const currentImage = currentImageId !== null ? imageListState.getImageById(currentImageId) : null;
 
 	const onMouseDown = () => {
 		isResizing.current = true;
@@ -60,36 +49,32 @@ function VQATaskMode() {
 		};
 	});
 
-	async function fetchTaskCount() {
-		const taskCounts = await api.countTasks("vqa-needs-prompts");
-		setTaskCounts(taskCounts);
-	}
-
-	async function onFinishedClicked() {
-		if (currentTask === null) {
-			return;
-		}
-
-		await api.finishTask(currentTask.task.id);
-
-		setCurrentTask(null);
-		setCurrentTask(await acquireTask());
-		void fetchTaskCount();
-	}
-
-	async function onSkipClicked() {
-		setCurrentTask(null);
-		setCurrentTask(await acquireTask());
-		void fetchTaskCount();
-	}
-
-	// Acquire a task on load
 	useEffect(() => {
-		async function initialTask() {
-			setCurrentTask(await acquireTask());
-			void fetchTaskCount();
-		}
-		void initialTask();
+		void vqaTaskQueueState.initialize();
+	}, []);
+
+	useEffect(() => {
+		const handleKeyDown = (event: KeyboardEvent) => {
+			const activeElement = document.activeElement as HTMLElement | null;
+			const isTyping =
+				activeElement &&
+				(activeElement.tagName === "INPUT" || activeElement.tagName === "TEXTAREA" || activeElement.isContentEditable);
+
+			if (isTyping) {
+				return;
+			}
+
+			if (event.key === "ArrowLeft") {
+				vqaTaskQueueState.goBack();
+			} else if (event.key === "ArrowRight") {
+				void vqaTaskQueueState.goForward();
+			}
+		};
+
+		document.addEventListener("keydown", handleKeyDown);
+		return () => {
+			document.removeEventListener("keydown", handleKeyDown);
+		};
 	}, []);
 
 	const containerRef = useRef<HTMLDivElement>(null);
@@ -106,7 +91,15 @@ function VQATaskMode() {
 					/>
 				</div>
 				<div className="row contentBased">
-					<TaskControls taskCounts={taskCounts} onFinishedClicked={onFinishedClicked} onSkipClicked={onSkipClicked} />
+					<TaskControls
+						taskCounts={vqaTaskQueueState.taskCounts}
+						onBackClicked={() => vqaTaskQueueState.goBack()}
+						onForwardClicked={() => void vqaTaskQueueState.goForward()}
+						onFinishedClicked={() => void vqaTaskQueueState.finishCurrentTask()}
+						canGoBack={vqaTaskQueueState.canGoBack}
+						canGoForward={!vqaTaskQueueState.isLoadingNextTask && !vqaTaskQueueState.isFinishingCurrentTask}
+						canFinish={vqaTaskQueueState.canFinishCurrentTask}
+					/>
 				</div>
 			</div>
 			<div className="column sideColumnLarge spacing-5">
@@ -123,19 +116,3 @@ function VQATaskMode() {
 }
 
 export default observer(VQATaskMode);
-
-async function acquireTask(): Promise<CurrentTask | null> {
-	const task = await api.acquireTask("vqa-needs-prompts");
-
-	if (task === null) {
-		return null;
-	}
-
-	// Parse task data
-	const data = JSON.parse(task.data) as TaskData;
-
-	// Fetch the image into our cache
-	await imageListState.fetchImage(data.image_id);
-
-	return { task, data };
-}
