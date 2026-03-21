@@ -1007,7 +1007,16 @@ async function multiModelRequest(
 			Promise.resolve()
 				.then(() => parseModelExtraOptions(model))
 				.then((extraOptions) =>
-					openAICompatRequest(api_key, url, model.model, model_messages, max_tokens, undefined, undefined, extraOptions),
+					openAICompatRequest(
+						api_key,
+						url,
+						model.model,
+						model_messages,
+						max_tokens,
+						undefined,
+						undefined,
+						extraOptions,
+					),
 				)
 				.then((response) => response)
 				.catch((error) => {

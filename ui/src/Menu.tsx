@@ -3,7 +3,15 @@ import { Icon } from "@iconify-icon/react";
 import { tagListState } from "./state/TagList";
 import React, { useEffect } from "react";
 import { imageListState } from "./state/ImageList";
-import { errorMessageState, windowState, WindowStates, imageResolutionState, popupsState, PopupStates } from "./state";
+import {
+	errorMessageState,
+	windowState,
+	WindowStates,
+	imageResolutionState,
+	popupsState,
+	PopupStates,
+	imageIdToUrl,
+} from "./state";
 import { currentImageState } from "./state/CurrentImage";
 import { API_URL, authenticatedFetch } from "./api";
 import { imageInfoPopupState } from "./ImageInfoPopup";
@@ -81,6 +89,18 @@ function Menu() {
 		}
 	}
 
+	async function onCopyClicked() {
+		if (currentImage === null) {
+			return;
+		}
+
+		try {
+			await copyImage(currentImage.id, currentImageResolution);
+		} catch (e) {
+			errorMessageState.setErrorMessage(`Failed to copy image: ${e as string}`);
+		}
+	}
+
 	function userSettingsClicked(event: React.MouseEvent<HTMLButtonElement, MouseEvent>) {
 		if (event.altKey) {
 			popupsState.addPopup(PopupStates.AdminPanel);
@@ -97,6 +117,11 @@ function Menu() {
 			<div className="menu-item">
 				<button className="menu-button" onClick={onDownloadClicked}>
 					<Icon icon="fluent:arrow-download-24-filled" />
+				</button>
+			</div>
+			<div className="menu-item">
+				<button className="menu-button" onClick={onCopyClicked}>
+					<Icon icon="fluent:copy-24-filled" />
 				</button>
 			</div>
 			<div className="menu-item">
@@ -177,6 +202,80 @@ async function downloadImage(hash: string): Promise<void> {
 	a.click();
 	window.URL.revokeObjectURL(url);
 	a.remove();
+}
+
+async function copyImage(imageId: number, resolution: number | null): Promise<void> {
+	if (!navigator.clipboard?.write || typeof ClipboardItem === "undefined") {
+		throw new Error("Image clipboard copy is not supported in this browser");
+	}
+
+	let url = imageIdToUrl(imageId);
+	if (resolution !== null) {
+		url += `?size=${resolution}`;
+	}
+
+	const response = await authenticatedFetch(url);
+
+	if (!response.ok) {
+		throw new Error(`Failed to copy image: ${response.status} ${response.statusText}`);
+	}
+
+	const blob = await response.blob();
+	const clipboardBlob = await getClipboardCompatibleImage(blob);
+	const mimeType = clipboardBlob.type || "image/png";
+
+	await navigator.clipboard.write([
+		new ClipboardItem({
+			[mimeType]: clipboardBlob,
+		}),
+	]);
+}
+
+async function getClipboardCompatibleImage(blob: Blob): Promise<Blob> {
+	if (blob.type === "image/png") {
+		return blob;
+	}
+
+	return await convertImageBlobToPng(blob);
+}
+
+async function convertImageBlobToPng(blob: Blob): Promise<Blob> {
+	const objectUrl = URL.createObjectURL(blob);
+
+	try {
+		const image = await loadImage(objectUrl);
+		const canvas = document.createElement("canvas");
+		canvas.width = image.naturalWidth;
+		canvas.height = image.naturalHeight;
+
+		const context = canvas.getContext("2d");
+		if (context === null) {
+			throw new Error("Failed to create canvas context for clipboard copy");
+		}
+
+		context.drawImage(image, 0, 0);
+
+		const pngBlob = await new Promise<Blob | null>((resolve) => {
+			canvas.toBlob(resolve, "image/png");
+		});
+
+		if (pngBlob === null) {
+			throw new Error("Failed to convert image for clipboard copy");
+		}
+
+		return pngBlob;
+	} finally {
+		URL.revokeObjectURL(objectUrl);
+	}
+}
+
+function loadImage(src: string): Promise<HTMLImageElement> {
+	return new Promise((resolve, reject) => {
+		const image = new Image();
+		image.onload = () => resolve(image);
+		image.onerror = () => reject(new Error("Failed to load image for clipboard copy"));
+		image.src = src;
+	});
 }
 
 export default Menu;
