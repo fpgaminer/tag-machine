@@ -5,6 +5,15 @@ import { popupsState, PopupStates } from "./state";
 export interface MultiModel {
 	model: string;
 	systemMessage: string;
+	extraOptionsJson: string;
+}
+
+function normalizeMultiModel(model: Partial<MultiModel> | null | undefined): MultiModel {
+	return {
+		model: typeof model?.model === "string" ? model.model : "",
+		systemMessage: typeof model?.systemMessage === "string" ? model.systemMessage : "",
+		extraOptionsJson: typeof model?.extraOptionsJson === "string" ? model.extraOptionsJson : "",
+	};
 }
 
 function VQAAIConfigPopup() {
@@ -20,7 +29,13 @@ function VQAAIConfigPopup() {
 	const [geminiSystemMessage, setGeminiSystemMessage] = useLocalStorageState<string>("GEMINI_SYSTEM_INSTRUCTION", "", {
 		sync: true,
 	});
-	const [multiModels, setMultiModels] = useLocalStorageState<MultiModel[]>("VQA_MULTI_MODELS", [], { sync: true });
+	const [multiModels, setMultiModels] = useLocalStorageState<MultiModel[]>("VQA_MULTI_MODELS", [], {
+		sync: true,
+		deserialize: (value) => {
+			const parsed = JSON.parse(value) as unknown;
+			return (Array.isArray(parsed) ? parsed : []).map((model) => normalizeMultiModel(model as Partial<MultiModel>));
+		},
+	});
 	const [geminiSafetySettings, setGeminiSafetySettings] = useLocalStorageState<string>("GEMINI_SAFETY_SETTINGS", "", {
 		sync: true,
 	});
@@ -65,8 +80,14 @@ function VQAAIConfigPopup() {
 		setMultiModels(newModels);
 	}
 
+	function onMultiModelsExtraOptionsChange(e: React.ChangeEvent<HTMLInputElement>, index: number) {
+		const newModels = multiModels.slice();
+		newModels[index].extraOptionsJson = e.target.value;
+		setMultiModels(newModels);
+	}
+
 	function onAddMultiModel() {
-		const newModels = [...multiModels, { model: "", systemMessage: "" }];
+		const newModels = [...multiModels, { model: "", systemMessage: "", extraOptionsJson: "" }];
 		setMultiModels(newModels);
 	}
 
@@ -125,6 +146,15 @@ function VQAAIConfigPopup() {
 									placeholder=" "
 									value={model.systemMessage}
 									onChange={(e) => onMultiModelsSystemMessageChange(e, index)}
+								/>
+							</div>
+							<div className="input-group">
+								<label htmlFor="extra-options-json">Extra Options JSON</label>
+								<input
+									type="text"
+									placeholder=" "
+									value={model.extraOptionsJson}
+									onChange={(e) => onMultiModelsExtraOptionsChange(e, index)}
 								/>
 							</div>
 							<button onClick={() => onRemoveMultiModel(index)}>Remove</button>

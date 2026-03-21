@@ -972,7 +972,7 @@ async function multiModelSuggestions(prompt: string, imageId: number, models: Mu
 			"https://openrouter.ai/api/v1/chat/completions",
 			models,
 			messages,
-			1024,
+			16384,
 		);
 
 		return suggestions;
@@ -1004,7 +1004,11 @@ async function multiModelRequest(
 		}
 
 		responses.push(
-			openAICompatRequest(api_key, url, model.model, model_messages, max_tokens)
+			Promise.resolve()
+				.then(() => parseModelExtraOptions(model))
+				.then((extraOptions) =>
+					openAICompatRequest(api_key, url, model.model, model_messages, max_tokens, undefined, undefined, extraOptions),
+				)
 				.then((response) => response)
 				.catch((error) => {
 					console.error(`Error running model ${model.model}: ${error}`);
@@ -1018,6 +1022,20 @@ async function multiModelRequest(
 	return results.filter((result) => result !== null);
 }
 
+function parseModelExtraOptions(model: MultiModel): Record<string, unknown> | undefined {
+	const rawValue = model.extraOptionsJson?.trim();
+	if (!rawValue) {
+		return undefined;
+	}
+
+	const parsed = JSON.parse(rawValue) as unknown;
+	if (parsed === null || Array.isArray(parsed) || typeof parsed !== "object") {
+		throw new Error(`Extra options for model "${model.model}" must be a JSON object`);
+	}
+
+	return parsed as Record<string, unknown>;
+}
+
 async function openAICompatRequest(
 	api_key: string,
 	url: string,
@@ -1026,11 +1044,13 @@ async function openAICompatRequest(
 	max_tokens: number,
 	temperature?: number,
 	top_p?: number,
+	extraOptions?: Record<string, unknown>,
 ): Promise<string> {
 	const body: { model: string; messages: object[]; max_tokens: number; temperature?: number; top_p?: number } = {
 		model,
 		messages,
 		max_tokens,
+		...extraOptions,
 	};
 
 	if (temperature !== undefined) {
