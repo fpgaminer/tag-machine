@@ -34,6 +34,11 @@ interface VQATemplateSettings {
 	template: LocalDraft | null;
 }
 
+interface SuggestedAnswer {
+	model: string;
+	answer: string;
+}
+
 const EMPTY_DRAFT_SOURCE = {
 	question: "",
 	answer: "",
@@ -183,7 +188,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const answerFieldRef = useRef<HTMLDivElement>(null);
 	const settingsMenuRef = useRef<HTMLDivElement>(null);
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
-	const [suggestedAnswers, setSuggestedAnswers] = useState<string[] | null>(null);
+	const [suggestedAnswers, setSuggestedAnswers] = useState<SuggestedAnswer[] | null>(null);
 	const [activeSuggestionMenu, setActiveSuggestionMenu] = useState<SuggestionMenu>(null);
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
@@ -445,8 +450,8 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		answerTextareaRef.current?.focus();
 	}
 
-	function onAnswerSelected(answer: string) {
-		updateDraft((prev) => ({ ...prev, answer: answer }));
+	function onAnswerSelected(answer: SuggestedAnswer) {
+		updateDraft((prev) => ({ ...prev, answer: answer.answer }));
 		setSuggestedAnswers(null);
 	}
 
@@ -602,12 +607,23 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				</div>
 			)}
 			{suggestedAnswers && (
-				<div className="suggested-prompts">
-					<h4>Suggested Answers:</h4>
+				<div className="suggested-prompts suggested-answer-results">
+					<div className="suggested-prompts-header">
+						<h4>Suggested Answers</h4>
+						<span>{suggestedAnswers.length} models</span>
+					</div>
 					<ul>
 						{suggestedAnswers.map((answer, index) => (
-							<li key={index} onClick={() => onAnswerSelected(answer)}>
-								{answer}
+							<li key={`${answer.model}-${index}`}>
+								<button
+									type="button"
+									className="suggested-answer-card"
+									onClick={() => onAnswerSelected(answer)}
+									title={`Use response from ${answer.model}`}
+								>
+									<span className="suggested-answer-card-model">{answer.model}</span>
+									<span className="suggested-answer-card-text">{answer.answer}</span>
+								</button>
 							</li>
 						))}
 					</ul>
@@ -934,7 +950,7 @@ async function* doCustom(
 	}
 }
 
-async function multiModelSuggestions(prompt: string, imageId: number, models: MultiModel[]): Promise<string[]> {
+async function multiModelSuggestions(prompt: string, imageId: number, models: MultiModel[]): Promise<SuggestedAnswer[]> {
 	try {
 		// Get API key
 		let apiKey = localStorage.getItem("OPENROUTER_API_KEY");
@@ -988,8 +1004,8 @@ async function multiModelRequest(
 	models: MultiModel[],
 	messages: object[],
 	max_tokens: number,
-): Promise<string[]> {
-	const responses: Promise<string | null>[] = [];
+): Promise<SuggestedAnswer[]> {
+	const responses: Promise<SuggestedAnswer | null>[] = [];
 
 	for (const model of models) {
 		let model_messages = messages.slice();
@@ -1018,7 +1034,10 @@ async function multiModelRequest(
 						extraOptions,
 					),
 				)
-				.then((response) => response)
+				.then((response) => ({
+					model: model.model,
+					answer: response,
+				}))
 				.catch((error) => {
 					console.error(`Error running model ${model.model}: ${error}`);
 					return null;

@@ -1046,34 +1046,122 @@ li p {
 
 /* Suggested Prompts */
 .suggested-prompts {
-	background-color: #2b2b2b;
+	background: linear-gradient(180deg, rgba(62, 62, 62, 0.96) 0%, rgba(43, 43, 43, 0.98) 100%);
+	border: 1px solid #4a4a4a;
+	box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.04);
 	color: #f0f0f0;
-	padding: 10px;
-	margin: 10px;
-	border-radius: 5px;
+	padding: 12px;
+	margin: 10px 10px 0;
+	border-radius: 10px;
 	overflow: auto;
 }
 
+.suggested-prompts-header {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	gap: 12px;
+	margin-bottom: 10px;
+}
+
 .suggested-prompts h4 {
-	margin-top: 0;
+	margin: 0;
+	font-size: 0.95rem;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+.suggested-prompts-header span {
+	color: #b8b8b8;
+	font-size: 0.78rem;
+	font-weight: 600;
+	letter-spacing: 0.08em;
+	text-transform: uppercase;
 }
 
 .suggested-prompts ul {
 	list-style-type: none;
 	padding: 0;
 	margin: 0;
+	height: auto;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .suggested-prompts li {
-	padding: 5px 10px;
-	margin-bottom: 5px;
-	background-color: #373737;
-	border-radius: 5px;
-	cursor: pointer;
+	margin: 0;
+	padding: 0;
+	overflow: visible;
+	text-overflow: clip;
 }
 
-.suggested-prompts li:hover {
+.suggested-prompts:not(.suggested-answer-results) li {
+	padding: 9px 12px;
+	background-color: #373737;
+	border: 1px solid transparent;
+	border-radius: 8px;
+	cursor: pointer;
+	transition: background-color 0.18s ease, border-color 0.18s ease, transform 0.18s ease;
+}
+
+.suggested-prompts:not(.suggested-answer-results) li:hover {
 	background-color: #474747;
+	border-color: #5b5b5b;
+	transform: translateY(-1px);
+}
+
+.suggested-answer-results {
+	padding: 14px;
+}
+
+.suggested-answer-card {
+	width: 100%;
+	display: flex;
+	flex-direction: column;
+	align-items: flex-start;
+	gap: 10px;
+	padding: 12px 14px;
+	border: 1px solid #4d4d4d;
+	border-radius: 10px;
+	background: linear-gradient(180deg, #363636 0%, #303030 100%);
+	color: #f0f0f0;
+	cursor: pointer;
+	text-align: left;
+	transition: border-color 0.18s ease, background-color 0.18s ease, transform 0.18s ease, box-shadow 0.18s ease;
+}
+
+.suggested-answer-card:hover {
+	border-color: #6a6a6a;
+	background: linear-gradient(180deg, #3a3a3a 0%, #343434 100%);
+	box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22);
+	transform: translateY(-1px);
+}
+
+.suggested-answer-card:focus-visible {
+	outline: none;
+	border-color: #86b7ff;
+	box-shadow: 0 0 0 2px rgba(134, 183, 255, 0.22);
+}
+
+.suggested-answer-card-model {
+	display: inline-flex;
+	align-items: center;
+	padding: 4px 8px;
+	border-radius: 999px;
+	background-color: rgba(134, 183, 255, 0.12);
+	border: 1px solid rgba(134, 183, 255, 0.28);
+	color: #cfe1ff;
+	font-size: 0.76rem;
+	font-weight: 700;
+	letter-spacing: 0.04em;
+	overflow-wrap: anywhere;
+}
+
+.suggested-answer-card-text {
+	color: #ececec;
+	line-height: 1.5;
+	white-space: pre-wrap;
 }
 
 
