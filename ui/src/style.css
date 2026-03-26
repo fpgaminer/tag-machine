@@ -612,7 +612,8 @@ li p {
 }
 
 .popup-window-body-content input[type="password"],
-.popup-window-body-content input[type="text"] {
+.popup-window-body-content input[type="text"],
+.vqa-ai-config-popup .input-group textarea {
 	width: 100%;
 	padding: 10px;
 	border-radius: 4px;
@@ -623,12 +624,14 @@ li p {
 }
 
 .popup-window-body-content input[type="password"]::placeholder,
-.popup-window-body-content input[type="text"]::placeholder {
+.popup-window-body-content input[type="text"]::placeholder,
+.vqa-ai-config-popup .input-group textarea::placeholder {
 	color: #aaaaaa;
 }
 
 .popup-window-body-content input[type="password"]:focus,
-.popup-window-body-content input[type="text"]:focus {
+.popup-window-body-content input[type="text"]:focus,
+.vqa-ai-config-popup .input-group textarea:focus {
 	outline: none;
 	border-color: #888;
 }
@@ -1273,6 +1276,16 @@ li p {
 .input-group input[type="password"],
 .input-group input[type="text"] {
 	flex: 1;
+}
+
+.vqa-ai-config-popup .input-group {
+	align-items: flex-start;
+}
+
+.vqa-ai-config-popup .input-group textarea {
+	flex: 1;
+	min-height: 96px;
+	resize: vertical;
 }
 
 .user-popup .logout-button, .user-popup .invalidate-button {

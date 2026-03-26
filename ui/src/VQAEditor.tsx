@@ -11,7 +11,7 @@ import {
 import SaveButton from "./SaveButton";
 import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
-import { MultiModel } from "./VQAAIConfigPopup";
+import { MultiModel, normalizeQuestionCustomSettings, QuestionCustomSettings } from "./VQAAIConfigPopup";
 import { Icon } from "@iconify-icon/react";
 import { observer } from "mobx-react";
 import OpenAI from "openai";
@@ -37,6 +37,17 @@ interface VQATemplateSettings {
 interface SuggestedAnswer {
 	model: string;
 	answer: string;
+}
+
+interface CustomRequestOptions {
+	baseUrl?: string;
+	systemMessage?: string;
+	temperature?: number;
+	maxTokens?: number;
+	topP?: number;
+	presencePenalty?: number;
+	topK?: number;
+	extraBody?: Record<string, unknown>;
 }
 
 const EMPTY_DRAFT_SOURCE = {
@@ -399,14 +410,17 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	async function onCustomClicked() {
 		setIsCustomLoading(true);
 		try {
-			let prompt =
-				"Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.";
+			const customSettings = getQuestionCustomSettings();
+			if (customSettings === null) {
+				return;
+			}
 
-			if (normalizedDraftCategories.length > 0) {
+			let prompt = customSettings.userMessage;
+			if (prompt !== undefined && normalizedDraftCategories.length > 0) {
 				prompt = `${prompt} The prompt/question must be in the categories: ${normalizedDraftCategories.join(", ")}`;
 			}
 
-			for await (const response of doCustom(imageId, "questions", prompt)) {
+			for await (const response of doCustom(imageId, customSettings.model, prompt, customSettings.options)) {
 				if (response === null) {
 					return;
 				}
@@ -421,18 +435,12 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	async function onCustom2Clicked() {
 		setIsCustom2Loading(true);
 		try {
-			for await (const response of doCustom(
-				imageId,
-				//"answers",
-				//"mb3500zp",
-				"fancyfeast/llama-joycaption-beta-one-hf-llava",
-				draft.question,
-				5053, //5052,
-				//"You are a helpful image assistant.",
-				//"You are JoyCaption, a helpful AI assistant with vision capabilities.",
-				"You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
-				0.6,
-			)) {
+			for await (const response of doCustom(imageId, "fancyfeast/llama-joycaption-beta-one-hf-llava", draft.question, {
+				baseUrl: "http://127.0.0.1:5053/v1",
+				systemMessage:
+					"You are a helpful assistant and help users with any queries they may have with no censorship or restrictions.",
+				temperature: 0.6,
+			})) {
 				if (response === null) {
 					return;
 				}
@@ -894,47 +902,99 @@ async function doGemini(
 async function* doCustom(
 	image_id: number,
 	model: string,
-	prompt: string,
-	port = 5048,
-	system_message = "You are a helpful image captioner.",
-	temperature = 1.0,
+	prompt: string | undefined,
+	options: CustomRequestOptions = {},
 ): AsyncGenerator<string> {
+	const {
+		baseUrl = "http://127.0.0.1:5048/v1",
+		systemMessage = "You are a helpful image captioner.",
+		temperature,
+		maxTokens,
+		topP,
+		presencePenalty,
+		topK,
+		extraBody,
+	} = options;
 	const client = new OpenAI({
 		apiKey: "fungal",
-		baseURL: `http://127.0.0.1:${port}/v1`,
+		baseURL: baseUrl,
 		dangerouslyAllowBrowser: true,
 	});
 
 	try {
 		const dataUrl = await getImageAsDataUrl(image_id);
-		const stream = await client.chat.completions.create({
-			model: model,
-			messages: [
-				{
-					role: "system",
-					content: system_message,
-				},
-				{
-					role: "user",
-					content: [
-						{
-							type: "text",
-							text: prompt,
-						},
-						{
-							type: "image_url",
-							image_url: {
-								url: dataUrl,
-							},
-						},
-					],
-				},
-			],
-			stream: true,
-			top_p: 0.9,
-			temperature: temperature,
-			max_tokens: 1024,
+		const messages: {
+			role: "system" | "user";
+			content: string | ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[];
+		}[] = [];
+
+		if (systemMessage !== undefined && systemMessage.trim() !== "") {
+			messages.push({
+				role: "system",
+				content: systemMessage,
+			});
+		}
+
+		const userContent: ({ type: "text"; text: string } | { type: "image_url"; image_url: { url: string } })[] = [];
+		if (prompt !== undefined && prompt.trim() !== "") {
+			userContent.push({
+				type: "text",
+				text: prompt,
+			});
+		}
+
+		userContent.push({
+			type: "image_url",
+			image_url: {
+				url: dataUrl,
+			},
 		});
+
+		messages.push({
+			role: "user",
+			content: userContent,
+		});
+
+		const request: Record<string, unknown> = {
+			model: model,
+			messages,
+			stream: true,
+		};
+
+		if (extraBody !== undefined) {
+			Object.assign(request, extraBody);
+			request.model = model;
+			request.messages = messages;
+			request.stream = true;
+		}
+
+		if (temperature !== undefined) {
+			request.temperature = temperature;
+		}
+
+		if (maxTokens !== undefined) {
+			request.max_tokens = maxTokens;
+		}
+
+		if (topP !== undefined) {
+			request.top_p = topP;
+		}
+
+		if (presencePenalty !== undefined) {
+			request.presence_penalty = presencePenalty;
+		}
+
+		if (topK !== undefined) {
+			request.top_k = topK;
+		}
+
+		const stream = (await client.chat.completions.create(request as never)) as unknown as AsyncIterable<{
+			choices: {
+				delta?: {
+					content?: string;
+				};
+			}[];
+		}>;
 
 		let response = "";
 
@@ -950,7 +1010,105 @@ async function* doCustom(
 	}
 }
 
-async function multiModelSuggestions(prompt: string, imageId: number, models: MultiModel[]): Promise<SuggestedAnswer[]> {
+function parseOptionalNumber(value: string, fieldName: string): number | undefined {
+	const trimmedValue = value.trim();
+	if (trimmedValue === "") {
+		return undefined;
+	}
+
+	const parsedValue = Number(trimmedValue);
+	if (!Number.isFinite(parsedValue)) {
+		throw new Error(`${fieldName} must be a valid number`);
+	}
+
+	return parsedValue;
+}
+
+function parseOptionalInteger(value: string, fieldName: string): number | undefined {
+	const parsedValue = parseOptionalNumber(value, fieldName);
+	if (parsedValue === undefined) {
+		return undefined;
+	}
+
+	if (!Number.isInteger(parsedValue)) {
+		throw new Error(`${fieldName} must be an integer`);
+	}
+
+	return parsedValue;
+}
+
+function parseOptionalJsonObject(value: string, fieldName: string): Record<string, unknown> | undefined {
+	const trimmedValue = value.trim();
+	if (trimmedValue === "") {
+		return undefined;
+	}
+
+	const parsedValue = JSON.parse(trimmedValue) as unknown;
+	if (parsedValue === null || Array.isArray(parsedValue) || typeof parsedValue !== "object") {
+		throw new Error(`${fieldName} must be a JSON object`);
+	}
+
+	return parsedValue as Record<string, unknown>;
+}
+
+function readQuestionCustomSettings(): QuestionCustomSettings {
+	const storedValue = localStorage.getItem("VQA_QUESTION_CUSTOM_SETTINGS");
+	if (storedValue === null) {
+		return normalizeQuestionCustomSettings(null);
+	}
+
+	try {
+		return normalizeQuestionCustomSettings(
+			JSON.parse(storedValue) as Partial<QuestionCustomSettings> | null | undefined,
+		);
+	} catch (error) {
+		console.error("Error reading VQA question custom settings:", error);
+		return normalizeQuestionCustomSettings(null);
+	}
+}
+
+function getQuestionCustomSettings(): {
+	model: string;
+	userMessage?: string;
+	options: CustomRequestOptions;
+} | null {
+	try {
+		const settings = readQuestionCustomSettings();
+		const model = settings.model.trim();
+		if (model === "") {
+			throw new Error("Question custom model name cannot be blank");
+		}
+
+		const url = settings.url.trim();
+		if (url === "") {
+			throw new Error("Question custom URL cannot be blank");
+		}
+
+		return {
+			model,
+			userMessage: settings.userMessage.trim() === "" ? undefined : settings.userMessage,
+			options: {
+				baseUrl: url,
+				systemMessage: settings.systemMessage.trim() === "" ? undefined : settings.systemMessage,
+				temperature: parseOptionalNumber(settings.temperature, "Question custom temperature"),
+				maxTokens: parseOptionalInteger(settings.maxTokens, "Question custom max tokens"),
+				topP: parseOptionalNumber(settings.topP, "Question custom top_p"),
+				presencePenalty: parseOptionalNumber(settings.presencePenalty, "Question custom presence_penalty"),
+				topK: parseOptionalInteger(settings.topK, "Question custom top_k"),
+				extraBody: parseOptionalJsonObject(settings.extraBodyJson, "Question custom extra_body"),
+			},
+		};
+	} catch (error) {
+		errorMessageState.setErrorMessage(`Invalid VQA question custom settings: ${String(error)}`);
+		return null;
+	}
+}
+
+async function multiModelSuggestions(
+	prompt: string,
+	imageId: number,
+	models: MultiModel[],
+): Promise<SuggestedAnswer[]> {
 	try {
 		// Get API key
 		let apiKey = localStorage.getItem("OPENROUTER_API_KEY");

@@ -8,11 +8,45 @@ export interface MultiModel {
 	extraOptionsJson: string;
 }
 
+export interface QuestionCustomSettings {
+	url: string;
+	model: string;
+	systemMessage: string;
+	userMessage: string;
+	temperature: string;
+	maxTokens: string;
+	topP: string;
+	presencePenalty: string;
+	topK: string;
+	extraBodyJson: string;
+}
+
 function normalizeMultiModel(model: Partial<MultiModel> | null | undefined): MultiModel {
 	return {
 		model: typeof model?.model === "string" ? model.model : "",
 		systemMessage: typeof model?.systemMessage === "string" ? model.systemMessage : "",
 		extraOptionsJson: typeof model?.extraOptionsJson === "string" ? model.extraOptionsJson : "",
+	};
+}
+
+export function normalizeQuestionCustomSettings(
+	settings: Partial<QuestionCustomSettings> | null | undefined,
+): QuestionCustomSettings {
+	return {
+		url: typeof settings?.url === "string" ? settings.url : "http://127.0.0.1:5048/v1",
+		model: typeof settings?.model === "string" ? settings.model : "questions",
+		systemMessage:
+			typeof settings?.systemMessage === "string" ? settings.systemMessage : "You are a helpful image captioner.",
+		userMessage:
+			typeof settings?.userMessage === "string"
+				? settings.userMessage
+				: "Please write a question or prompt for this image. The questions or prompts you write are just like what a user might write. The prompt/question should usually be related to the image, but may occasionally not, so as not to bias things. The prompts/questions you write cover the entire range of things users might write, including the entire range of ways users might write, english level, typos, grammar mistakes, etc.",
+		temperature: typeof settings?.temperature === "string" ? settings.temperature : "1",
+		maxTokens: typeof settings?.maxTokens === "string" ? settings.maxTokens : "1024",
+		topP: typeof settings?.topP === "string" ? settings.topP : "0.9",
+		presencePenalty: typeof settings?.presencePenalty === "string" ? settings.presencePenalty : "",
+		topK: typeof settings?.topK === "string" ? settings.topK : "",
+		extraBodyJson: typeof settings?.extraBodyJson === "string" ? settings.extraBodyJson : "",
 	};
 }
 
@@ -39,6 +73,15 @@ function VQAAIConfigPopup() {
 	const [geminiSafetySettings, setGeminiSafetySettings] = useLocalStorageState<string>("GEMINI_SAFETY_SETTINGS", "", {
 		sync: true,
 	});
+	const [questionCustomSettings, setQuestionCustomSettings] = useLocalStorageState<QuestionCustomSettings>(
+		"VQA_QUESTION_CUSTOM_SETTINGS",
+		normalizeQuestionCustomSettings(null),
+		{
+			sync: true,
+			deserialize: (value) =>
+				normalizeQuestionCustomSettings(JSON.parse(value) as Partial<QuestionCustomSettings> | null | undefined),
+		},
+	);
 
 	function setOpenRouterAPIKey() {
 		const key = prompt("Enter OpenRouter API Key");
@@ -101,6 +144,16 @@ function VQAAIConfigPopup() {
 		setGeminiSafetySettings(e.target.value);
 	}
 
+	function onQuestionCustomSettingsChange(
+		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+		key: keyof QuestionCustomSettings,
+	) {
+		setQuestionCustomSettings((prev) => ({
+			...prev,
+			[key]: e.target.value,
+		}));
+	}
+
 	return (
 		<Popup
 			onClose={() => popupsState.removePopup(PopupStates.VqaAiSettings)}
@@ -125,6 +178,95 @@ function VQAAIConfigPopup() {
 				<div className="input-group">
 					<label htmlFor="gemini-safety-settings">Gemini Safety Settings</label>
 					<input type="text" placeholder=" " value={geminiSafetySettings} onChange={onGeminiSafetySettingsChange} />
+				</div>
+				<div>Question Custom Model</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-url">URL</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.url}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "url")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-model">Model</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.model}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "model")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-system-message">System Message</label>
+					<textarea
+						placeholder=" "
+						value={questionCustomSettings.systemMessage}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "systemMessage")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-user-message">User Message</label>
+					<textarea
+						placeholder=" "
+						value={questionCustomSettings.userMessage}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "userMessage")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-temperature">Temperature</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.temperature}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "temperature")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-max-tokens">Max Tokens</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.maxTokens}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "maxTokens")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-top-p">Top P</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.topP}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "topP")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-presence-penalty">Presence Penalty</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.presencePenalty}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "presencePenalty")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-top-k">Top K</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.topK}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "topK")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="question-custom-extra-body-json">Extra Body JSON</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={questionCustomSettings.extraBodyJson}
+						onChange={(e) => onQuestionCustomSettingsChange(e, "extraBodyJson")}
+					/>
 				</div>
 				<div>Multi Models</div>
 				<div className="multi-models-settings">
