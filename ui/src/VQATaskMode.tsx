@@ -2,11 +2,12 @@ import { observer } from "mobx-react";
 import ActiveTagList from "./ActiveTagList";
 import ImageDisplay from "./ImageDisplay";
 import VQAEditor from "./VQAEditor";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import TaskControls from "./TaskControls";
 import { imageListState } from "./state/ImageList";
 import { imageResolutionState } from "./state";
 import { vqaTaskQueueState } from "./state/VQATaskQueue";
+import { useCommandPaletteCommands } from "./CommandPalette";
 
 function VQATaskMode() {
 	const initialHeight = parseFloat(localStorage.getItem("layout-vqamode-height") ?? "50");
@@ -76,6 +77,21 @@ function VQATaskMode() {
 			document.removeEventListener("keydown", handleKeyDown);
 		};
 	}, []);
+
+	const commandPaletteCommands = useMemo(
+		() => [
+			{
+				id: "vqa-task.finished",
+				title: "Task: Finished",
+				keywords: ["task", "vqa", "finished", "finish", "complete", "done"],
+				action: () => vqaTaskQueueState.finishCurrentTask(),
+				disabled: !vqaTaskQueueState.canFinishCurrentTask,
+			},
+		],
+		[vqaTaskQueueState.canFinishCurrentTask],
+	);
+
+	useCommandPaletteCommands(commandPaletteCommands);
 
 	const containerRef = useRef<HTMLDivElement>(null);
 

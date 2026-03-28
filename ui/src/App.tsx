@@ -15,6 +15,7 @@ import VQAAIConfigPopup from "./VQAAIConfigPopup";
 import { WikiPopup } from "./WikiPopup";
 import UploadPopup from "./UploadPopup";
 import BoundingBoxMode from "./BoundingBoxMode";
+import { CommandPaletteProvider } from "./CommandPalette";
 
 function App() {
 	const windowStateState = windowState.state;
@@ -39,26 +40,28 @@ function App() {
 	});
 
 	return (
-		<div className="app-container">
-			{popups}
-			<div className="column remainingSpace">
-				<div className="row contentBased">
-					<ErrorMessage />
-				</div>
-				<div className="row contentBased">
-					{windowStateState !== WindowStates.Login && windowStateState !== WindowStates.Register ? <Menu /> : null}
-				</div>
-				<div className="row remainingSpace spacing-5">
-					{windowStateState === WindowStates.Login ? <LoginWindow /> : null}
-					{windowStateState === WindowStates.Tagging ? <TaggingMode /> : null}
-					{windowStateState === WindowStates.Captioning ? <CaptionMode /> : null}
-					{windowStateState === WindowStates.Vqa ? <VQAMode /> : null}
-					{windowStateState === WindowStates.Register ? <RegisterWindow /> : null}
-					{windowStateState === WindowStates.VqaTasks ? <VQATaskMode /> : null}
-					{windowStateState === WindowStates.BoundingBox ? <BoundingBoxMode /> : null}
+		<CommandPaletteProvider>
+			<div className="app-container">
+				{popups}
+				<div className="column remainingSpace">
+					<div className="row contentBased">
+						<ErrorMessage />
+					</div>
+					<div className="row contentBased">
+						{windowStateState !== WindowStates.Login && windowStateState !== WindowStates.Register ? <Menu /> : null}
+					</div>
+					<div className="row remainingSpace spacing-5">
+						{windowStateState === WindowStates.Login ? <LoginWindow /> : null}
+						{windowStateState === WindowStates.Tagging ? <TaggingMode /> : null}
+						{windowStateState === WindowStates.Captioning ? <CaptionMode /> : null}
+						{windowStateState === WindowStates.Vqa ? <VQAMode /> : null}
+						{windowStateState === WindowStates.Register ? <RegisterWindow /> : null}
+						{windowStateState === WindowStates.VqaTasks ? <VQATaskMode /> : null}
+						{windowStateState === WindowStates.BoundingBox ? <BoundingBoxMode /> : null}
+					</div>
 				</div>
 			</div>
-		</div>
+		</CommandPaletteProvider>
 	);
 }
 

@@ -16,6 +16,7 @@ import { Icon } from "@iconify-icon/react";
 import { observer } from "mobx-react";
 import OpenAI from "openai";
 import useLocalStorageState from "./useLocalStateStorage";
+import { useCommandPaletteCommands } from "./CommandPalette";
 
 interface QuestionAnswer {
 	question: string;
@@ -194,6 +195,8 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const hasTemplateAnswerText = isTemplatePreviewActive && draft.answer.trim() !== "";
 
 	// ─────────────────── UI state / refs ───────────────────
+	const categoryInputRef = useRef<HTMLInputElement>(null);
+	const questionTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const questionFieldRef = useRef<HTMLDivElement>(null);
 	const answerTextareaRef = useRef<HTMLTextAreaElement>(null);
 	const answerFieldRef = useRef<HTMLDivElement>(null);
@@ -548,6 +551,46 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		}
 	}
 
+	const commandPaletteCommands = useMemo(
+		() => [
+			{
+				id: "vqa.focus.category",
+				title: "Focus: VQA Category",
+				keywords: ["vqa", "focus", "category", "categories"],
+				action: () => focusAndSelectField(categoryInputRef),
+			},
+			{
+				id: "vqa.focus.question",
+				title: "Focus: VQA Question",
+				keywords: ["vqa", "focus", "question"],
+				action: () => focusAndSelectField(questionTextareaRef),
+			},
+			{
+				id: "vqa.focus.answer",
+				title: "Focus: VQA Answer",
+				keywords: ["vqa", "focus", "answer"],
+				action: () => focusAndSelectField(answerTextareaRef),
+			},
+			{
+				id: "vqa.question.custom-model-suggest-question",
+				title: "Question: Custom Model Suggest Question",
+				keywords: ["vqa", "question", "custom", "suggest", "qs", "custom: suggest qs"],
+				action: () => onCustomClicked(),
+				disabled: isQuestionSuggestionLoading,
+			},
+			{
+				id: "vqa.answer.suggest-answers",
+				title: "Answer: Suggest Answers",
+				keywords: ["vqa", "answer", "suggest", "as", "suggest as"],
+				action: () => onSuggestAnswersClicked(),
+				disabled: isAnswerSuggestionLoading,
+			},
+		],
+		[isAnswerSuggestionLoading, isQuestionSuggestionLoading],
+	);
+
+	useCommandPaletteCommands(commandPaletteCommands);
+
 	return (
 		<div className="column remainingSpace">
 			<div className="contentBased columnHeader">
@@ -640,6 +683,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			<div className="remainingSpace vqaEditor">
 				<div className="category-input-container">
 					<input
+						ref={categoryInputRef}
 						className={hasTemplateCategoryText ? "vqa-template-preview" : undefined}
 						placeholder="Enter the categories"
 						value={draft.categoriesInput}
@@ -659,6 +703,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				</div>
 				<div className="vqa-textarea-field" ref={questionFieldRef}>
 					<textarea
+						ref={questionTextareaRef}
 						className={hasTemplateQuestionText ? "vqa-template-preview" : undefined}
 						placeholder="Enter your question"
 						value={draft.question}
@@ -685,7 +730,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 								disabled={isQuestionSuggestionLoading}
 								onClick={() => handleQuestionMenuAction(onCustomClicked)}
 							>
-								Custom
+								CUSTOM: SUGGEST QS
 							</button>
 							<button
 								type="button"
@@ -751,6 +796,13 @@ function clearDraft(imageId: number) {
 }
 
 export default observer(VQAEditor);
+
+function focusAndSelectField(ref: React.RefObject<HTMLInputElement | HTMLTextAreaElement | null>) {
+	window.requestAnimationFrame(() => {
+		ref.current?.focus();
+		ref.current?.select();
+	});
+}
 
 function blobToDataURL(blob: Blob): Promise<string> {
 	return new Promise((resolve, reject) => {
