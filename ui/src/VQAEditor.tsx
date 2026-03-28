@@ -586,7 +586,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				disabled: isAnswerSuggestionLoading,
 			},
 		],
-		[isAnswerSuggestionLoading, isQuestionSuggestionLoading],
+		[imageId, draft.question, normalizedDraftCategories, isAnswerSuggestionLoading, isQuestionSuggestionLoading],
 	);
 
 	useCommandPaletteCommands(commandPaletteCommands);
