@@ -1104,6 +1104,24 @@ function getQuestionCustomSettings(): {
 	}
 }
 
+function extractInlineSystemMessage(prompt: string): { prompt: string; systemMessage?: string } {
+	const matches = Array.from(prompt.matchAll(/<system>([\s\S]*?)<\/system>/gi));
+	if (matches.length === 0) {
+		return { prompt };
+	}
+
+	const systemMessage = matches
+		.map((match) => match[1]?.trim() ?? "")
+		.filter(Boolean)
+		.join("\n\n");
+	const promptWithoutSystem = prompt.replace(/<system>[\s\S]*?<\/system>/gi, "").trim();
+
+	return {
+		prompt: promptWithoutSystem,
+		systemMessage: systemMessage === "" ? undefined : systemMessage,
+	};
+}
+
 async function multiModelSuggestions(
 	prompt: string,
 	imageId: number,
@@ -1122,6 +1140,7 @@ async function multiModelSuggestions(
 
 		// Get image
 		const dataUrl = await getImageAsDataUrl(imageId);
+		const parsedPrompt = extractInlineSystemMessage(prompt);
 
 		// Construct messages
 		const messages = [
@@ -1132,10 +1151,14 @@ async function multiModelSuggestions(
 						type: "image_url",
 						image_url: dataUrl,
 					},
-					{
-						type: "text",
-						text: prompt,
-					},
+					...(parsedPrompt.prompt === ""
+						? []
+						: [
+								{
+									type: "text",
+									text: parsedPrompt.prompt,
+								},
+							]),
 				],
 			},
 		];
@@ -1147,6 +1170,7 @@ async function multiModelSuggestions(
 			models,
 			messages,
 			16384,
+			parsedPrompt.systemMessage,
 		);
 
 		return suggestions;
@@ -1162,16 +1186,18 @@ async function multiModelRequest(
 	models: MultiModel[],
 	messages: object[],
 	max_tokens: number,
+	systemMessageOverride?: string,
 ): Promise<SuggestedAnswer[]> {
 	const responses: Promise<SuggestedAnswer | null>[] = [];
 
 	for (const model of models) {
 		let model_messages = messages.slice();
-		if (model.systemMessage.trim() != "") {
+		const effectiveSystemMessage = systemMessageOverride ?? model.systemMessage.trim();
+		if (effectiveSystemMessage !== "") {
 			model_messages = [
 				{
 					role: "system",
-					content: model.systemMessage.trim(),
+					content: effectiveSystemMessage,
 				},
 				...model_messages,
 			];
