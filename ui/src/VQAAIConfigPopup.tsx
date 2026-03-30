@@ -2,6 +2,9 @@ import useLocalStorageState from "./useLocalStateStorage";
 import Popup from "./Popup";
 import { popupsState, PopupStates } from "./state";
 
+export const VQA_MULTI_MODELS_STORAGE_KEY = "VQA_MULTI_MODELS";
+export const VQA_MULTI_MODELS_UPDATED_EVENT = "vqa-multi-models-updated";
+
 export interface MultiModel {
 	model: string;
 	systemMessage: string;
@@ -21,12 +24,31 @@ export interface QuestionCustomSettings {
 	extraBodyJson: string;
 }
 
-function normalizeMultiModel(model: Partial<MultiModel> | null | undefined): MultiModel {
+export function normalizeMultiModel(model: Partial<MultiModel> | null | undefined): MultiModel {
 	return {
 		model: typeof model?.model === "string" ? model.model : "",
 		systemMessage: typeof model?.systemMessage === "string" ? model.systemMessage : "",
 		extraOptionsJson: typeof model?.extraOptionsJson === "string" ? model.extraOptionsJson : "",
 	};
+}
+
+export function readMultiModelsFromStorage(): MultiModel[] {
+	const storedValue = localStorage.getItem(VQA_MULTI_MODELS_STORAGE_KEY);
+	if (storedValue === null) {
+		return [];
+	}
+
+	try {
+		const parsed = JSON.parse(storedValue) as unknown;
+		return (Array.isArray(parsed) ? parsed : []).map((model) => normalizeMultiModel(model as Partial<MultiModel>));
+	} catch (error) {
+		console.error("Error reading VQA multi models:", error);
+		return [];
+	}
+}
+
+function notifyMultiModelsUpdated(models: MultiModel[]) {
+	window.dispatchEvent(new CustomEvent<MultiModel[]>(VQA_MULTI_MODELS_UPDATED_EVENT, { detail: models }));
 }
 
 export function normalizeQuestionCustomSettings(
@@ -63,7 +85,7 @@ function VQAAIConfigPopup() {
 	const [geminiSystemMessage, setGeminiSystemMessage] = useLocalStorageState<string>("GEMINI_SYSTEM_INSTRUCTION", "", {
 		sync: true,
 	});
-	const [multiModels, setMultiModels] = useLocalStorageState<MultiModel[]>("VQA_MULTI_MODELS", [], {
+	const [multiModels, setMultiModels] = useLocalStorageState<MultiModel[]>(VQA_MULTI_MODELS_STORAGE_KEY, [], {
 		sync: true,
 		deserialize: (value) => {
 			const parsed = JSON.parse(value) as unknown;
@@ -115,29 +137,34 @@ function VQAAIConfigPopup() {
 		const newModels = multiModels.slice();
 		newModels[index].model = e.target.value;
 		setMultiModels(newModels);
+		notifyMultiModelsUpdated(newModels);
 	}
 
 	function onMultiModelsSystemMessageChange(e: React.ChangeEvent<HTMLInputElement>, index: number) {
 		const newModels = multiModels.slice();
 		newModels[index].systemMessage = e.target.value;
 		setMultiModels(newModels);
+		notifyMultiModelsUpdated(newModels);
 	}
 
 	function onMultiModelsExtraOptionsChange(e: React.ChangeEvent<HTMLInputElement>, index: number) {
 		const newModels = multiModels.slice();
 		newModels[index].extraOptionsJson = e.target.value;
 		setMultiModels(newModels);
+		notifyMultiModelsUpdated(newModels);
 	}
 
 	function onAddMultiModel() {
 		const newModels = [...multiModels, { model: "", systemMessage: "", extraOptionsJson: "" }];
 		setMultiModels(newModels);
+		notifyMultiModelsUpdated(newModels);
 	}
 
 	function onRemoveMultiModel(index: number) {
 		const newModels = multiModels.slice();
 		newModels.splice(index, 1);
 		setMultiModels(newModels);
+		notifyMultiModelsUpdated(newModels);
 	}
 
 	function onGeminiSafetySettingsChange(e: React.ChangeEvent<HTMLInputElement>) {

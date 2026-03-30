@@ -11,7 +11,13 @@ import {
 import SaveButton from "./SaveButton";
 import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
-import { MultiModel, normalizeQuestionCustomSettings, QuestionCustomSettings } from "./VQAAIConfigPopup";
+import {
+	MultiModel,
+	normalizeQuestionCustomSettings,
+	QuestionCustomSettings,
+	readMultiModelsFromStorage,
+	VQA_MULTI_MODELS_UPDATED_EVENT,
+} from "./VQAAIConfigPopup";
 import { Icon } from "@iconify-icon/react";
 import { observer } from "mobx-react";
 import OpenAI from "openai";
@@ -148,7 +154,7 @@ function normalizeTemplateSettings(source: Partial<VQATemplateSettings> | null |
 	};
 }
 
-type SuggestionMenu = "question" | "answer" | "settings" | null;
+type SuggestionMenu = "question" | "answer" | "answer-single-model" | "settings" | null;
 
 function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const imageId = currentImage.id;
@@ -204,6 +210,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const [suggestedPrompts, setSuggestedPrompts] = useState<string[] | null>(null);
 	const [suggestedAnswers, setSuggestedAnswers] = useState<SuggestedAnswer[] | null>(null);
 	const [activeSuggestionMenu, setActiveSuggestionMenu] = useState<SuggestionMenu>(null);
+	const [configuredMultiModels, setConfiguredMultiModels] = useState<MultiModel[]>(() => getConfiguredMultiModels());
 	const [isCustomLoading, setIsCustomLoading] = useState(false);
 	const [isCustom2Loading, setIsCustom2Loading] = useState(false);
 	const [isSuggestQuestionsLoading, setIsSuggestQuestionsLoading] = useState(false);
@@ -211,6 +218,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 
 	const isQuestionSuggestionLoading = isCustomLoading || isSuggestQuestionsLoading;
 	const isAnswerSuggestionLoading = isCustom2Loading || isSuggestAnswersLoading;
+	const hasConfiguredMultiModels = configuredMultiModels.length > 0;
 
 	// ─────────────────── Save to server ───────────────────
 	const handleSave = useCallback(async () => {
@@ -324,6 +332,22 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 		};
 	}, []);
 
+	useEffect(() => {
+		const handleMultiModelsUpdated = (event: Event) => {
+			if (event instanceof CustomEvent && Array.isArray(event.detail)) {
+				setConfiguredMultiModels(getConfiguredMultiModels(event.detail as MultiModel[]));
+				return;
+			}
+
+			setConfiguredMultiModels(getConfiguredMultiModels());
+		};
+
+		window.addEventListener(VQA_MULTI_MODELS_UPDATED_EVENT, handleMultiModelsUpdated);
+		return () => {
+			window.removeEventListener(VQA_MULTI_MODELS_UPDATED_EVENT, handleMultiModelsUpdated);
+		};
+	}, []);
+
 	const onRevert = () => {
 		clearDraft(imageId);
 		setShouldPersistDraft(false);
@@ -354,9 +378,17 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	};
 
 	async function onSuggestAnswersClicked() {
+		await onSuggestAnswersForModels(configuredMultiModels);
+	}
+
+	async function onSuggestAnswersForModels(models: MultiModel[]) {
+		if (models.length === 0) {
+			errorMessageState.setErrorMessage("Please configure at least one VQA answer model");
+			return;
+		}
+
 		setIsSuggestAnswersLoading(true);
 		try {
-			const models = JSON.parse(localStorage.getItem("VQA_MULTI_MODELS") ?? "[]") as MultiModel[];
 			const suggestions = await multiModelSuggestions(draft.question, imageId, models);
 			setSuggestedAnswers(suggestions);
 		} finally {
@@ -580,13 +612,28 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 			},
 			{
 				id: "vqa.answer.suggest-answers",
-				title: "Answer: Suggest Answers",
-				keywords: ["vqa", "answer", "suggest", "as", "suggest as"],
+				title: "Answer: Suggest Answers (All Models)",
+				keywords: ["vqa", "answer", "suggest", "as", "suggest as", "all", "all models"],
 				action: () => onSuggestAnswersClicked(),
-				disabled: isAnswerSuggestionLoading,
+				disabled: isAnswerSuggestionLoading || !hasConfiguredMultiModels,
 			},
+			...configuredMultiModels.map((model, index) => ({
+				id: `vqa.answer.suggest-answer.single-model.${index}.${model.model}`,
+				title: `Answer: Suggest Answer via ${model.model}`,
+				keywords: ["vqa", "answer", "suggest", "single", "model", model.model],
+				action: () => onSuggestAnswersForModels([model]),
+				disabled: isAnswerSuggestionLoading,
+			})),
 		],
-		[imageId, draft.question, normalizedDraftCategories, isAnswerSuggestionLoading, isQuestionSuggestionLoading],
+		[
+			configuredMultiModels,
+			hasConfiguredMultiModels,
+			imageId,
+			draft.question,
+			normalizedDraftCategories,
+			isAnswerSuggestionLoading,
+			isQuestionSuggestionLoading,
+		],
 	);
 
 	useCommandPaletteCommands(commandPaletteCommands);
@@ -661,7 +708,9 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				<div className="suggested-prompts suggested-answer-results">
 					<div className="suggested-prompts-header">
 						<h4>Suggested Answers</h4>
-						<span>{suggestedAnswers.length} models</span>
+						<span>
+							{suggestedAnswers.length} model{suggestedAnswers.length === 1 ? "" : "s"}
+						</span>
 					</div>
 					<ul>
 						{suggestedAnswers.map((answer, index) => (
@@ -782,6 +831,43 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 							>
 								Suggest As
 							</button>
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isAnswerSuggestionLoading}
+								onClick={() => setActiveSuggestionMenu("answer-single-model")}
+							>
+								Suggest A: One Model
+							</button>
+						</div>
+					)}
+					{activeSuggestionMenu === "answer-single-model" && (
+						<div className="vqa-ai-suggest-menu">
+							<button
+								type="button"
+								className="vqa-ai-suggest-menu-item"
+								disabled={isAnswerSuggestionLoading}
+								onClick={() => setActiveSuggestionMenu("answer")}
+							>
+								Back
+							</button>
+							{configuredMultiModels.length === 0 ? (
+								<button type="button" className="vqa-ai-suggest-menu-item" disabled>
+									No Models Configured
+								</button>
+							) : (
+								configuredMultiModels.map((model, index) => (
+									<button
+										key={`${model.model}-${index}`}
+										type="button"
+										className="vqa-ai-suggest-menu-item"
+										disabled={isAnswerSuggestionLoading}
+										onClick={() => handleAnswerMenuAction(() => onSuggestAnswersForModels([model]))}
+									>
+										{model.model}
+									</button>
+								))
+							)}
 						</div>
 					)}
 					<div className="word-count-overlay in-answer-field"># words: {wordCount}</div>
@@ -1154,6 +1240,10 @@ function getQuestionCustomSettings(): {
 		errorMessageState.setErrorMessage(`Invalid VQA question custom settings: ${String(error)}`);
 		return null;
 	}
+}
+
+function getConfiguredMultiModels(models = readMultiModelsFromStorage()): MultiModel[] {
+	return models.filter((model) => model.model.trim() !== "");
 }
 
 function extractInlineSystemMessage(prompt: string): { prompt: string; systemMessage?: string } {
