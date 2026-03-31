@@ -9,13 +9,13 @@ import {
 	removeImageAttribute,
 } from "./state";
 import SaveButton from "./SaveButton";
-import { GoogleGenAI, MediaResolution, type SafetySetting, ThinkingLevel, Type } from "@google/genai";
 import { authenticatedFetch } from "./api";
 import {
 	MultiModel,
 	normalizeQuestionCustomSettings,
 	QuestionCustomSettings,
 	readMultiModelsFromStorage,
+	readSuggestQuestionsModelSettingsFromStorage,
 	VQA_MULTI_MODELS_UPDATED_EVENT,
 } from "./VQAAIConfigPopup";
 import { Icon } from "@iconify-icon/react";
@@ -82,6 +82,26 @@ function buildDraft(
 		categories,
 		categoriesInput: typeof source?.categoriesInput === "string" ? source.categoriesInput : categories.join(","),
 	};
+}
+
+function normalizeQuestionAnswer(source: Partial<QuestionAnswer> | null | undefined): QuestionAnswer {
+	return {
+		question: typeof source?.question === "string" ? source.question : "",
+		answer: typeof source?.answer === "string" ? source.answer : "",
+	};
+}
+
+function parseQuestionAnswer(value: string | null): QuestionAnswer {
+	if (value === null) {
+		return { question: "", answer: "" };
+	}
+
+	try {
+		return normalizeQuestionAnswer(JSON.parse(value) as Partial<QuestionAnswer>);
+	} catch (error) {
+		console.error("Error parsing questionAnswer attribute:", error);
+		return { question: "", answer: "" };
+	}
 }
 
 function normalizeCategories(categories: string[] | null | undefined): string[] {
@@ -163,10 +183,7 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	const imageQA = currentImage.singularAttribute("questionAnswer");
 	const imageCategories = normalizeCategories(currentImage.nonSingularAttribute("vqa_category") ?? []);
 
-	const parsedQA = useMemo(
-		() => (imageQA === null ? { question: "", answer: "" } : (JSON.parse(imageQA) as QuestionAnswer)),
-		[imageQA],
-	);
+	const parsedQA = useMemo(() => parseQuestionAnswer(imageQA), [imageQA]);
 	const serverDraft = useMemo(
 		() => ({
 			question: parsedQA.question,
@@ -399,44 +416,17 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 	async function onSuggestQuestionsClicked() {
 		setIsSuggestQuestionsLoading(true);
 		try {
-			const genPrompt = localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT");
-			if (genPrompt === null) {
-				errorMessageState.setErrorMessage("Please set a prompt for generating VQA questions");
+			const settings = getSuggestQuestionsSettings();
+			if (settings === null) {
 				return;
 			}
 
-			const { systemInstruction, safetySettings } = await getGeminiSettings();
-			if (systemInstruction === null || safetySettings === null) {
+			const prompts = await suggestQuestionPrompts(imageId, settings);
+			if (prompts === null) {
 				return;
 			}
 
-			console.log(
-				"Running Gemini with system instruction:",
-				systemInstruction,
-				"and safety settings:",
-				safetySettings,
-				"and gen prompt:",
-				genPrompt,
-			);
-
-			const response = await doGemini(systemInstruction, safetySettings, imageId, genPrompt, {
-				type: Type.OBJECT,
-				properties: {
-					prompts: {
-						type: Type.ARRAY,
-						items: {
-							type: Type.STRING,
-						},
-					},
-				},
-				required: ["prompts"],
-			});
-			if (response === null) {
-				return;
-			}
-
-			const jsonResponse = JSON.parse(response) as { prompts: string[] };
-			setSuggestedPrompts(jsonResponse.prompts);
+			setSuggestedPrompts(prompts);
 		} finally {
 			setIsSuggestQuestionsLoading(false);
 		}
@@ -602,6 +592,13 @@ function VQAEditor({ currentImage }: { currentImage: ImageObject }) {
 				title: "Focus: VQA Answer",
 				keywords: ["vqa", "focus", "answer"],
 				action: () => focusAndSelectField(answerTextareaRef),
+			},
+			{
+				id: "vqa.question.suggest-questions",
+				title: "Question: Suggest Questions",
+				keywords: ["vqa", "question", "suggest", "questions", "qs", "openrouter"],
+				action: () => onSuggestQuestionsClicked(),
+				disabled: isQuestionSuggestionLoading,
 			},
 			{
 				id: "vqa.question.custom-model-suggest-question",
@@ -910,27 +907,6 @@ function blobToDataURL(blob: Blob): Promise<string> {
 	});
 }
 
-async function getImageAsBase64(imageId: number): Promise<{ base64: string; mimeType: string }> {
-	const response = await authenticatedFetch(imageIdToUrl(imageId));
-	if (!response.ok) {
-		throw new Error(`Failed to fetch image: ${response.status} ${response.statusText}`);
-	}
-
-	const mimeType = response.headers.get("Content-Type") ?? "image/jpeg";
-	const blob = await response.blob();
-	const dataUrl = await blobToDataURL(blob);
-
-	const commaIndex = dataUrl.indexOf(",");
-	if (commaIndex === -1) {
-		throw new Error("Invalid data URL");
-	}
-
-	return {
-		base64: dataUrl.slice(commaIndex + 1),
-		mimeType,
-	};
-}
-
 async function getImageAsDataUrl(imageId: number): Promise<string> {
 	const response = await authenticatedFetch(imageIdToUrl(imageId));
 	if (!response.ok) {
@@ -947,94 +923,6 @@ function asyncPrompt(message: string): Promise<string | null> {
 		const result = prompt(message);
 		resolve(result);
 	});
-}
-
-async function getGeminiSettings(): Promise<{
-	systemInstruction: string | null;
-	safetySettings: SafetySetting[] | null;
-}> {
-	let systemInstruction = localStorage.getItem("GEMINI_SYSTEM_INSTRUCTION");
-	if (systemInstruction === null) {
-		systemInstruction = await asyncPrompt("Enter system instruction");
-		if (systemInstruction === null) {
-			return { systemInstruction: null, safetySettings: null };
-		}
-		localStorage.setItem("GEMINI_SYSTEM_INSTRUCTION", systemInstruction);
-	}
-
-	let safetySettingsJson = localStorage.getItem("GEMINI_SAFETY_SETTINGS");
-	if (safetySettingsJson === null) {
-		safetySettingsJson = await asyncPrompt("Enter safety settings");
-		if (safetySettingsJson === null) {
-			return { systemInstruction: null, safetySettings: null };
-		}
-		localStorage.setItem("GEMINI_SAFETY_SETTINGS", safetySettingsJson);
-	}
-
-	const safetySettings = JSON.parse(safetySettingsJson) as SafetySetting[];
-
-	return { systemInstruction, safetySettings };
-}
-
-async function doGemini(
-	systemInstruction: string,
-	safetySettings: SafetySetting[],
-	imageId: number,
-	question: string,
-	responseSchema: Record<string, unknown> | null,
-): Promise<string | null> {
-	try {
-		let apiKey = localStorage.getItem("GEMINI_API_KEY");
-		if (apiKey === null) {
-			apiKey = await asyncPrompt("Enter API key");
-			if (apiKey === null) {
-				return null;
-			}
-			localStorage.setItem("GEMINI_API_KEY", apiKey);
-		}
-
-		const imageBase64 = await getImageAsBase64(imageId);
-		const ai = new GoogleGenAI({ apiKey });
-		const config = {
-			maxOutputTokens: 1024,
-			thinkingConfig: {
-				thinkingLevel: ThinkingLevel.MEDIUM,
-			},
-			mediaResolution: MediaResolution.MEDIA_RESOLUTION_HIGH,
-			systemInstruction: [
-				{
-					text: systemInstruction,
-				},
-			],
-			responseMimeType: responseSchema ? "application/json" : "text/plain",
-			safetySettings,
-			...(responseSchema ? { responseJsonSchema: responseSchema } : {}),
-		};
-
-		const response = await ai.models.generateContent({
-			model: "gemini-3.1-pro-preview",
-			contents: [
-				{
-					role: "user",
-					parts: [
-						{ text: question },
-						{
-							inlineData: {
-								data: imageBase64.base64,
-								mimeType: imageBase64.mimeType,
-							},
-						},
-					],
-				},
-			],
-			config,
-		});
-
-		return response.text ?? "";
-	} catch (e) {
-		alert(`Error running Gemini: ${String(e)}`);
-		return "";
-	}
 }
 
 async function* doCustom(
@@ -1242,6 +1130,31 @@ function getQuestionCustomSettings(): {
 	}
 }
 
+function getSuggestQuestionsSettings(): {
+	model: string;
+	systemMessage?: string;
+	userMessage?: string;
+	extraOptions?: Record<string, unknown>;
+} | null {
+	try {
+		const settings = readSuggestQuestionsModelSettingsFromStorage();
+		const model = settings.model.trim();
+		if (model === "") {
+			throw new Error("Suggest questions model cannot be blank");
+		}
+
+		return {
+			model,
+			systemMessage: settings.systemMessage.trim() === "" ? undefined : settings.systemMessage,
+			userMessage: settings.userMessage.trim() === "" ? undefined : settings.userMessage,
+			extraOptions: parseOptionalJsonObject(settings.extraOptionsJson, "Suggest questions extra options"),
+		};
+	} catch (error) {
+		errorMessageState.setErrorMessage(`Invalid VQA suggest questions settings: ${String(error)}`);
+		return null;
+	}
+}
+
 function getConfiguredMultiModels(models = readMultiModelsFromStorage()): MultiModel[] {
 	return models.filter((model) => model.model.trim() !== "");
 }
@@ -1262,6 +1175,103 @@ function extractInlineSystemMessage(prompt: string): { prompt: string; systemMes
 		prompt: promptWithoutSystem,
 		systemMessage: systemMessage === "" ? undefined : systemMessage,
 	};
+}
+
+const SUGGEST_QUESTIONS_RESPONSE_INSTRUCTION =
+	'Return JSON only with the shape {"prompts":["..."]}. Do not wrap the JSON in markdown.';
+
+function buildSuggestQuestionsUserMessage(userMessage?: string): string {
+	const baseMessage = userMessage?.trim() ?? "";
+	return baseMessage === ""
+		? SUGGEST_QUESTIONS_RESPONSE_INSTRUCTION
+		: `${baseMessage}\n\n${SUGGEST_QUESTIONS_RESPONSE_INSTRUCTION}`;
+}
+
+function parseSuggestedPromptsResponse(response: string): string[] {
+	const trimmedResponse = response.trim();
+	const fencedMatch = trimmedResponse.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+	const normalizedResponse = fencedMatch ? fencedMatch[1].trim() : trimmedResponse;
+	const parsed = JSON.parse(normalizedResponse) as unknown;
+
+	const prompts = Array.isArray(parsed)
+		? parsed
+		: parsed !== null && typeof parsed === "object" && Array.isArray((parsed as { prompts?: unknown }).prompts)
+			? (parsed as { prompts: unknown[] }).prompts
+			: null;
+
+	if (prompts === null) {
+		throw new Error('Response must be a JSON array or an object with a "prompts" array');
+	}
+
+	return Array.from(
+		new Set(
+			prompts
+				.filter((prompt): prompt is string => typeof prompt === "string")
+				.map((prompt) => prompt.trim())
+				.filter(Boolean),
+		),
+	);
+}
+
+async function suggestQuestionPrompts(
+	imageId: number,
+	settings: {
+		model: string;
+		systemMessage?: string;
+		userMessage?: string;
+		extraOptions?: Record<string, unknown>;
+	},
+): Promise<string[] | null> {
+	try {
+		let apiKey = localStorage.getItem("OPENROUTER_API_KEY");
+		if (apiKey === null) {
+			apiKey = await asyncPrompt("Enter API key");
+			if (apiKey === null) {
+				return null;
+			}
+			localStorage.setItem("OPENROUTER_API_KEY", apiKey);
+		}
+
+		const dataUrl = await getImageAsDataUrl(imageId);
+		const messages: object[] = [
+			{
+				role: "user",
+				content: [
+					{
+						type: "image_url",
+						image_url: dataUrl,
+					},
+					{
+						type: "text",
+						text: buildSuggestQuestionsUserMessage(settings.userMessage),
+					},
+				],
+			},
+		];
+
+		if (settings.systemMessage !== undefined) {
+			messages.unshift({
+				role: "system",
+				content: settings.systemMessage,
+			});
+		}
+
+		const response = await openAICompatRequest(
+			apiKey,
+			"https://openrouter.ai/api/v1/chat/completions",
+			settings.model,
+			messages,
+			2048,
+			undefined,
+			undefined,
+			settings.extraOptions,
+		);
+
+		return parseSuggestedPromptsResponse(response);
+	} catch (error) {
+		errorMessageState.setErrorMessage(`Error suggesting VQA questions: ${String(error)}`);
+		return null;
+	}
 }
 
 async function multiModelSuggestions(

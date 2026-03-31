@@ -4,10 +4,18 @@ import { popupsState, PopupStates } from "./state";
 
 export const VQA_MULTI_MODELS_STORAGE_KEY = "VQA_MULTI_MODELS";
 export const VQA_MULTI_MODELS_UPDATED_EVENT = "vqa-multi-models-updated";
+export const VQA_SUGGEST_QUESTIONS_MODEL_STORAGE_KEY = "VQA_SUGGEST_QUESTIONS_MODEL";
 
 export interface MultiModel {
 	model: string;
 	systemMessage: string;
+	extraOptionsJson: string;
+}
+
+export interface SuggestQuestionsModelSettings {
+	model: string;
+	systemMessage: string;
+	userMessage: string;
 	extraOptionsJson: string;
 }
 
@@ -30,6 +38,47 @@ export function normalizeMultiModel(model: Partial<MultiModel> | null | undefine
 		systemMessage: typeof model?.systemMessage === "string" ? model.systemMessage : "",
 		extraOptionsJson: typeof model?.extraOptionsJson === "string" ? model.extraOptionsJson : "",
 	};
+}
+
+function getLegacySuggestQuestionsDefaults(): Partial<SuggestQuestionsModelSettings> {
+	return {
+		model: "",
+		systemMessage: localStorage.getItem("GEMINI_SYSTEM_INSTRUCTION") ?? "",
+		userMessage: localStorage.getItem("GEMINI_GEN_VQA_QUESTIONS_PROMPT") ?? "",
+		extraOptionsJson: "",
+	};
+}
+
+export function normalizeSuggestQuestionsModelSettings(
+	settings: Partial<SuggestQuestionsModelSettings> | null | undefined,
+	legacyDefaults: Partial<SuggestQuestionsModelSettings> = {},
+): SuggestQuestionsModelSettings {
+	return {
+		model: typeof settings?.model === "string" ? settings.model : (legacyDefaults.model ?? ""),
+		systemMessage:
+			typeof settings?.systemMessage === "string" ? settings.systemMessage : (legacyDefaults.systemMessage ?? ""),
+		userMessage: typeof settings?.userMessage === "string" ? settings.userMessage : (legacyDefaults.userMessage ?? ""),
+		extraOptionsJson:
+			typeof settings?.extraOptionsJson === "string"
+				? settings.extraOptionsJson
+				: (legacyDefaults.extraOptionsJson ?? ""),
+	};
+}
+
+export function readSuggestQuestionsModelSettingsFromStorage(): SuggestQuestionsModelSettings {
+	const legacyDefaults = getLegacySuggestQuestionsDefaults();
+	const storedValue = localStorage.getItem(VQA_SUGGEST_QUESTIONS_MODEL_STORAGE_KEY);
+	if (storedValue === null) {
+		return normalizeSuggestQuestionsModelSettings(null, legacyDefaults);
+	}
+
+	try {
+		const parsed = JSON.parse(storedValue) as Partial<SuggestQuestionsModelSettings> | null | undefined;
+		return normalizeSuggestQuestionsModelSettings(parsed, legacyDefaults);
+	} catch (error) {
+		console.error("Error reading VQA suggest questions model settings:", error);
+		return normalizeSuggestQuestionsModelSettings(null, legacyDefaults);
+	}
 }
 
 export function readMultiModelsFromStorage(): MultiModel[] {
@@ -76,24 +125,24 @@ function VQAAIConfigPopup() {
 	// TODO: Encrypt API keys using the a key derived from the user's current token.
 	// This will result in the API keys being lost when the user logs out, but ensures that the API keys are not stored in plaintext in the local storage.
 	const openrouter_api_key_is_set = localStorage.getItem("OPENROUTER_API_KEY") !== null;
-	const gemini_api_key_is_set = localStorage.getItem("GEMINI_API_KEY") !== null;
-	const [suggestQuestionsPrompt, setSuggestQuestionsPrompt] = useLocalStorageState<string>(
-		"GEMINI_GEN_VQA_QUESTIONS_PROMPT",
-		"",
-		{ sync: true },
+	const [suggestQuestionsSettings, setSuggestQuestionsSettings] = useLocalStorageState<SuggestQuestionsModelSettings>(
+		VQA_SUGGEST_QUESTIONS_MODEL_STORAGE_KEY,
+		() => readSuggestQuestionsModelSettingsFromStorage(),
+		{
+			sync: true,
+			deserialize: (value) =>
+				normalizeSuggestQuestionsModelSettings(
+					JSON.parse(value) as Partial<SuggestQuestionsModelSettings> | null | undefined,
+					getLegacySuggestQuestionsDefaults(),
+				),
+		},
 	);
-	const [geminiSystemMessage, setGeminiSystemMessage] = useLocalStorageState<string>("GEMINI_SYSTEM_INSTRUCTION", "", {
-		sync: true,
-	});
 	const [multiModels, setMultiModels] = useLocalStorageState<MultiModel[]>(VQA_MULTI_MODELS_STORAGE_KEY, [], {
 		sync: true,
 		deserialize: (value) => {
 			const parsed = JSON.parse(value) as unknown;
 			return (Array.isArray(parsed) ? parsed : []).map((model) => normalizeMultiModel(model as Partial<MultiModel>));
 		},
-	});
-	const [geminiSafetySettings, setGeminiSafetySettings] = useLocalStorageState<string>("GEMINI_SAFETY_SETTINGS", "", {
-		sync: true,
 	});
 	const [questionCustomSettings, setQuestionCustomSettings] = useLocalStorageState<QuestionCustomSettings>(
 		"VQA_QUESTION_CUSTOM_SETTINGS",
@@ -115,22 +164,14 @@ function VQAAIConfigPopup() {
 		localStorage.setItem("OPENROUTER_API_KEY", key);
 	}
 
-	function setGeminiAPIKey() {
-		const key = prompt("Enter Gemini API Key");
-
-		if (key === null) {
-			return;
-		}
-
-		localStorage.setItem("GEMINI_API_KEY", key);
-	}
-
-	function onSuggestQuestionsPromptChange(e: React.ChangeEvent<HTMLInputElement>) {
-		setSuggestQuestionsPrompt(e.target.value);
-	}
-
-	function onGeminiSystemMessageChange(e: React.ChangeEvent<HTMLInputElement>) {
-		setGeminiSystemMessage(e.target.value);
+	function onSuggestQuestionsSettingsChange(
+		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+		key: keyof SuggestQuestionsModelSettings,
+	) {
+		setSuggestQuestionsSettings((prev) => ({
+			...prev,
+			[key]: e.target.value,
+		}));
 	}
 
 	function onMultiModelsChange(e: React.ChangeEvent<HTMLInputElement>, index: number) {
@@ -167,10 +208,6 @@ function VQAAIConfigPopup() {
 		notifyMultiModelsUpdated(newModels);
 	}
 
-	function onGeminiSafetySettingsChange(e: React.ChangeEvent<HTMLInputElement>) {
-		setGeminiSafetySettings(e.target.value);
-	}
-
 	function onQuestionCustomSettingsChange(
 		e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
 		key: keyof QuestionCustomSettings,
@@ -191,20 +228,39 @@ function VQAAIConfigPopup() {
 				OpenRouter API Key: {openrouter_api_key_is_set ? "Set" : "Not Set"}
 				<button onClick={setOpenRouterAPIKey}>Set OpenRouter API Key</button>
 				<br />
-				Gemini API Key: {gemini_api_key_is_set ? "Set" : "Not Set"}
-				<button onClick={setGeminiAPIKey}>Set Gemini API Key</button>
-				<br />
+				<div>Suggest Questions Model</div>
 				<div className="input-group">
-					<label htmlFor="suggest-questions-prompt">Suggest Questions Prompt</label>
-					<input type="text" placeholder=" " value={suggestQuestionsPrompt} onChange={onSuggestQuestionsPromptChange} />
+					<label htmlFor="suggest-questions-model">Model</label>
+					<input
+						type="text"
+						placeholder=" "
+						value={suggestQuestionsSettings.model}
+						onChange={(e) => onSuggestQuestionsSettingsChange(e, "model")}
+					/>
 				</div>
 				<div className="input-group">
-					<label htmlFor="gemini-system-message">Gemini System Message</label>
-					<input type="text" placeholder=" " value={geminiSystemMessage} onChange={onGeminiSystemMessageChange} />
+					<label htmlFor="suggest-questions-system-message">System Message</label>
+					<textarea
+						placeholder=" "
+						value={suggestQuestionsSettings.systemMessage}
+						onChange={(e) => onSuggestQuestionsSettingsChange(e, "systemMessage")}
+					/>
 				</div>
 				<div className="input-group">
-					<label htmlFor="gemini-safety-settings">Gemini Safety Settings</label>
-					<input type="text" placeholder=" " value={geminiSafetySettings} onChange={onGeminiSafetySettingsChange} />
+					<label htmlFor="suggest-questions-user-message">User Message</label>
+					<textarea
+						placeholder=" "
+						value={suggestQuestionsSettings.userMessage}
+						onChange={(e) => onSuggestQuestionsSettingsChange(e, "userMessage")}
+					/>
+				</div>
+				<div className="input-group">
+					<label htmlFor="suggest-questions-extra-options-json">Extra Options</label>
+					<textarea
+						placeholder=" "
+						value={suggestQuestionsSettings.extraOptionsJson}
+						onChange={(e) => onSuggestQuestionsSettingsChange(e, "extraOptionsJson")}
+					/>
 				</div>
 				<div>Question Custom Model</div>
 				<div className="input-group">
@@ -295,7 +351,7 @@ function VQAAIConfigPopup() {
 						onChange={(e) => onQuestionCustomSettingsChange(e, "extraBodyJson")}
 					/>
 				</div>
-				<div>Multi Models</div>
+				<div>Suggest Answers Models</div>
 				<div className="multi-models-settings">
 					{multiModels.map((model, index) => (
 						<div key={index}>
